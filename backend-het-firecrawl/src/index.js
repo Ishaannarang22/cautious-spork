@@ -8,8 +8,11 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Initialize Firecrawl
-const firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
+// Initialize Firecrawl (only if API key is set)
+let firecrawl = null;
+if (process.env.FIRECRAWL_API_KEY) {
+  firecrawl = new FirecrawlApp({ apiKey: process.env.FIRECRAWL_API_KEY });
+}
 
 // Nyne AI config
 const NYNE_API_KEY = process.env.NYNE_API_KEY;
@@ -186,6 +189,11 @@ app.get('/api/discover-claims/stream', async (req, res) => {
 // Firecrawl with crawlUrlAndWatch (real-time WebSocket)
 // ============================================================
 async function scrapeWithFirecrawl(url, label, profile, sendEvent) {
+  if (!firecrawl) {
+    sendEvent('firecrawl_skipped', { label, url, message: 'Firecrawl not configured' });
+    return null;
+  }
+
   try {
     sendEvent('firecrawl_scraping', { label, url, message: `Scraping ${label}: ${url}` });
 

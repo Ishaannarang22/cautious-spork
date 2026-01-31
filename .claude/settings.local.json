@@ -7,7 +7,23 @@
       "Bash(vercel ls:*)",
       "Bash(vercel inspect:*)",
       "Bash(git add:*)",
-      "Bash(vercel --yes:*)"
+      "Bash(vercel --yes:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.firecrawl.dev)",
+      "WebFetch(domain:nyne.ai)",
+      "WebFetch(domain:api.nyne.ai)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npm install:*)",
+      "Bash(railway init:*)",
+      "Bash(railway variables set:*)",
+      "Bash(railway service:*)",
+      "Bash(railway up:*)",
+      "Bash(railway status:*)",
+      "Bash(railway link:*)",
+      "Bash(railway --help:*)",
+      "Bash(railway open:*)",
+      "Bash(curl:*)"
     ]
   }
 }
