@@ -1,73 +1,67 @@
-# Welcome to your Lovable project
+# Claim Compass
 
-## Project info
+Legal claims discovery platform - Find money you're owed.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Project Structure
 
-## How can I edit this code?
-
-There are several ways of editing your application.
-
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+├── frontend/               # React + Vite frontend
+├── backend-het-firecrawl/  # Node.js backend with Firecrawl integration
+└── README.md
 ```
 
-**Edit a file directly in GitHub**
+## Getting Started
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Frontend
 
-**Use GitHub Codespaces**
+```bash
+cd frontend
+npm install
+npm run dev
+# Opens at http://localhost:8080
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Backend
 
-## What technologies are used for this project?
+```bash
+cd backend-het-firecrawl
+npm install
+cp .env.example .env   # Add your Firecrawl API key
+npm run dev
+# Runs at http://localhost:3001
+```
 
-This project is built with:
+## Team Setup
 
+1. Clone the repo
+2. Run frontend and backend as shown above
+3. Get a Firecrawl API key from https://firecrawl.dev
+
+## API Endpoints (Backend)
+
+- `GET /api/health` - Health check
+- `POST /api/scrape/linkedin` - Scrape LinkedIn profile (TODO)
+- `POST /api/questions/generate` - Generate personalized questions (TODO)
+
+## Flow
+
+```
+User enters email/LinkedIn
+    → Firecrawl scrapes data
+    → Generate personalized questions
+    → Show relevant claims
+```
+
+## Tech Stack
+
+**Frontend:**
 - Vite
 - TypeScript
 - React
 - shadcn-ui
 - Tailwind CSS
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+**Backend:**
+- Node.js
+- Express
+- Firecrawl API

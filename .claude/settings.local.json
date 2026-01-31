@@ -3,7 +3,10 @@
     "allow": [
       "Bash(ls:*)",
       "Bash(diff:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(vercel ls:*)",
+      "Bash(vercel inspect:*)",
+      "Bash(git add:*)"
     ]
   }
 }
