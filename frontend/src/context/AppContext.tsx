@@ -1,79 +1,85 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { User, UserProfile, VerificationAnswers } from '@/types/user';
-import { Claim, sampleClaims } from '@/data/sampleClaims';
 
-type AppState = 'landing' | 'scanning' | 'verification' | 'dashboard';
+type AppState = 'landing' | 'userDiscovery' | 'companyDiscovery' | 'redacto' | 'drafts';
+
+export interface UserInfo {
+  name: string;
+  email: string;
+  company?: string;
+}
+
+export interface DiscoveredUserData {
+  socialProfiles: { platform: string; url: string; username: string }[];
+  dataBreaches: { name: string; date: string; dataTypes: string[] }[];
+  publicRecords: { type: string; details: string }[];
+  onlinePresence: { site: string; info: string }[];
+}
+
+export interface DiscoveredCompanyData {
+  companyInfo: { field: string; value: string }[];
+  employees: { name: string; role: string }[];
+  newsArticles: { title: string; source: string; date: string }[];
+  legalFilings: { type: string; date: string; status: string }[];
+}
+
+export interface RedactoResult {
+  category: string;
+  findings: { item: string; risk: 'high' | 'medium' | 'low'; action: string }[];
+}
+
+export interface DraftItem {
+  id: string;
+  type: string;
+  title: string;
+  content: string;
+  status: 'pending' | 'sent' | 'deleted';
+}
 
 interface AppContextType {
   appState: AppState;
   setAppState: (state: AppState) => void;
-  user: UserProfile | null;
-  setUser: (user: UserProfile | null) => void;
-  claims: Claim[];
-  acceptedClaims: Claim[];
-  skippedClaims: Claim[];
-  pendingClaims: Claim[];
-  acceptClaim: (claimId: string) => void;
-  skipClaim: (claimId: string) => void;
-  verificationAnswers: VerificationAnswers;
-  updateVerificationAnswer: (key: keyof VerificationAnswers, value: boolean) => void;
+  userInfo: UserInfo | null;
+  setUserInfo: (info: UserInfo | null) => void;
+  discoveredUserData: DiscoveredUserData | null;
+  setDiscoveredUserData: (data: DiscoveredUserData | null) => void;
+  discoveredCompanyData: DiscoveredCompanyData | null;
+  setDiscoveredCompanyData: (data: DiscoveredCompanyData | null) => void;
+  redactoResults: RedactoResult[];
+  setRedactoResults: (results: RedactoResult[]) => void;
+  drafts: DraftItem[];
+  setDrafts: (drafts: DraftItem[]) => void;
+  deleteDraft: (id: string) => void;
 }
-
-const defaultVerificationAnswers: VerificationAnswers = {
-  dataBreachNotifications: null,
-  californiaResident: null,
-  spamCalls: null,
-  retailerAccounts: null,
-  vehicleOwner: null,
-  californiaEmployer: null,
-};
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [appState, setAppState] = useState<AppState>('landing');
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [acceptedClaimIds, setAcceptedClaimIds] = useState<string[]>([]);
-  const [skippedClaimIds, setSkippedClaimIds] = useState<string[]>([]);
-  const [verificationAnswers, setVerificationAnswers] = useState<VerificationAnswers>(defaultVerificationAnswers);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [discoveredUserData, setDiscoveredUserData] = useState<DiscoveredUserData | null>(null);
+  const [discoveredCompanyData, setDiscoveredCompanyData] = useState<DiscoveredCompanyData | null>(null);
+  const [redactoResults, setRedactoResults] = useState<RedactoResult[]>([]);
+  const [drafts, setDrafts] = useState<DraftItem[]>([]);
 
-  const claims = sampleClaims;
-  
-  const acceptedClaims = claims.filter(c => acceptedClaimIds.includes(c.id)).map(c => ({
-    ...c,
-    status: ['pending', 'in_progress', 'completed'][Math.floor(Math.random() * 3)] as Claim['status'],
-    progress: Math.floor(Math.random() * 100)
-  }));
-  
-  const skippedClaims = claims.filter(c => skippedClaimIds.includes(c.id));
-  const pendingClaims = claims.filter(c => !acceptedClaimIds.includes(c.id) && !skippedClaimIds.includes(c.id));
-
-  const acceptClaim = (claimId: string) => {
-    setAcceptedClaimIds(prev => [...prev, claimId]);
-  };
-
-  const skipClaim = (claimId: string) => {
-    setSkippedClaimIds(prev => [...prev, claimId]);
-  };
-
-  const updateVerificationAnswer = (key: keyof VerificationAnswers, value: boolean) => {
-    setVerificationAnswers(prev => ({ ...prev, [key]: value }));
+  const deleteDraft = (id: string) => {
+    setDrafts(prev => prev.map(d => d.id === id ? { ...d, status: 'deleted' as const } : d));
   };
 
   return (
     <AppContext.Provider value={{
       appState,
       setAppState,
-      user,
-      setUser,
-      claims,
-      acceptedClaims,
-      skippedClaims,
-      pendingClaims,
-      acceptClaim,
-      skipClaim,
-      verificationAnswers,
-      updateVerificationAnswer,
+      userInfo,
+      setUserInfo,
+      discoveredUserData,
+      setDiscoveredUserData,
+      discoveredCompanyData,
+      setDiscoveredCompanyData,
+      redactoResults,
+      setRedactoResults,
+      drafts,
+      setDrafts,
+      deleteDraft,
     }}>
       {children}
     </AppContext.Provider>
