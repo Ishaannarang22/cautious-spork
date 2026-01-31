@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: claim-compass-api
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NYNE_API_KEY
+        sync: false
+      - key: NYNE_API_SECRET
+        sync: false
+      - key: FIRECRAWL_API_KEY
+        sync: false
+      - key: PORT
+        value: 3001
