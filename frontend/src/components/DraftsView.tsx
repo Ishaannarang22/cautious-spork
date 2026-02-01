@@ -90,7 +90,7 @@ const DraftsView: React.FC = () => {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="border-b border-border">
-        <div className="max-w-lg mx-auto px-6 py-4">
+        <div className="max-w-6xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Scale className="w-5 h-5" />
@@ -106,211 +106,241 @@ const DraftsView: React.FC = () => {
       </header>
 
       {/* Main */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-8">
+      <main className="flex-1 flex items-center justify-center px-6 py-8">
         {!isComplete ? (
-          <>
-            {/* Progress */}
-            <div className="mb-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                {pendingDrafts.length} document{pendingDrafts.length !== 1 ? 's' : ''} remaining
-              </p>
-            </div>
+          <div className="flex gap-8 w-full max-w-6xl">
+            {/* Left side - Cards */}
+            <div className="flex-1 flex flex-col items-center">
+              {/* Progress */}
+              <div className="mb-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {pendingDrafts.length} document{pendingDrafts.length !== 1 ? 's' : ''} remaining
+                </p>
+              </div>
 
-            {/* Card Stack */}
-            <div className="relative w-full max-w-md h-[480px]">
-              {/* Background cards for stack effect */}
-              {pendingDrafts.slice(1, 3).map((draft, index) => (
-                <div
-                  key={draft.id}
-                  className="absolute inset-0 bg-white rounded-3xl border border-border"
-                  style={{
-                    transform: `scale(${1 - (index + 1) * 0.05}) translateY(${(index + 1) * 12}px)`,
-                    zIndex: -index - 1,
-                    opacity: 1 - (index + 1) * 0.2,
-                  }}
-                />
-              ))}
-
-              {/* Main Card */}
-              <AnimatePresence mode="wait">
-                {currentDraft && (
-                  <motion.div
-                    key={currentDraft.id}
-                    drag="x"
-                    dragConstraints={{ left: 0, right: 0 }}
-                    dragElastic={0.7}
-                    onDragEnd={handleDragEnd}
-                    initial={{ scale: 0.95, opacity: 0 }}
-                    animate={{
-                      scale: 1,
-                      opacity: 1,
-                      x: direction === 'left' ? -400 : direction === 'right' ? 400 : 0,
-                      rotate: direction === 'left' ? -20 : direction === 'right' ? 20 : 0,
+              {/* Card Stack */}
+              <div className="relative w-full max-w-md h-[480px]">
+                {/* Background cards for stack effect */}
+                {pendingDrafts.slice(1, 3).map((draft, index) => (
+                  <div
+                    key={draft.id}
+                    className="absolute inset-0 bg-white rounded-3xl border border-border"
+                    style={{
+                      transform: `scale(${1 - (index + 1) * 0.05}) translateY(${(index + 1) * 12}px)`,
+                      zIndex: -index - 1,
+                      opacity: 1 - (index + 1) * 0.2,
                     }}
-                    exit={{
-                      x: direction === 'left' ? -400 : 400,
-                      rotate: direction === 'left' ? -20 : 20,
-                      opacity: 0,
-                    }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                    className="absolute inset-0 bg-white rounded-3xl border border-border shadow-lg cursor-grab active:cursor-grabbing overflow-hidden flex flex-col"
-                  >
-                    {/* Swipe Indicators */}
+                  />
+                ))}
+
+                {/* Main Card */}
+                <AnimatePresence mode="wait">
+                  {currentDraft && (
                     <motion.div
-                      className="absolute top-6 left-6 px-4 py-2 rounded-xl border-2 border-red-400 text-red-500 font-bold text-lg rotate-[-20deg] opacity-0 pointer-events-none"
-                      style={{
-                        opacity: direction === 'left' ? 1 : 0,
+                      key={currentDraft.id}
+                      drag="x"
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={0.7}
+                      onDragEnd={handleDragEnd}
+                      initial={{ scale: 0.95, opacity: 0 }}
+                      animate={{
+                        scale: 1,
+                        opacity: 1,
+                        x: direction === 'left' ? -400 : direction === 'right' ? 400 : 0,
+                        rotate: direction === 'left' ? -20 : direction === 'right' ? 20 : 0,
                       }}
-                    >
-                      SKIP
-                    </motion.div>
-                    <motion.div
-                      className="absolute top-6 right-6 px-4 py-2 rounded-xl border-2 border-emerald-400 text-emerald-500 font-bold text-lg rotate-[20deg] opacity-0 pointer-events-none"
-                      style={{
-                        opacity: direction === 'right' ? 1 : 0,
+                      exit={{
+                        x: direction === 'left' ? -400 : 400,
+                        rotate: direction === 'left' ? -20 : 20,
+                        opacity: 0,
                       }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                      className="absolute inset-0 bg-white rounded-3xl border border-border shadow-lg cursor-grab active:cursor-grabbing overflow-hidden flex flex-col"
                     >
-                      SEND
-                    </motion.div>
+                      {/* Swipe Indicators */}
+                      <motion.div
+                        className="absolute top-6 left-6 px-4 py-2 rounded-xl border-2 border-red-400 text-red-500 font-bold text-lg rotate-[-20deg] opacity-0 pointer-events-none"
+                        style={{
+                          opacity: direction === 'left' ? 1 : 0,
+                        }}
+                      >
+                        SKIP
+                      </motion.div>
+                      <motion.div
+                        className="absolute top-6 right-6 px-4 py-2 rounded-xl border-2 border-emerald-400 text-emerald-500 font-bold text-lg rotate-[20deg] opacity-0 pointer-events-none"
+                        style={{
+                          opacity: direction === 'right' ? 1 : 0,
+                        }}
+                      >
+                        SEND
+                      </motion.div>
 
-                    {/* Card Content */}
-                    <div className="p-6 flex-1 flex flex-col">
-                      {/* Type Badge */}
-                      <div className="mb-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getTypeBadgeClass(currentDraft.type)}`}>
-                          {currentDraft.type}
-                        </span>
-                      </div>
-
-                      {/* Title */}
-                      <h2 className="text-xl font-medium mb-3">{currentDraft.title}</h2>
-
-                      {/* Content Preview / Full */}
-                      <div className="flex-1 overflow-hidden">
-                        <div className={`text-sm text-muted-foreground ${isExpanded ? '' : 'line-clamp-4'}`}>
-                          {currentDraft.content}
+                      {/* Card Content */}
+                      <div className="p-6 flex-1 flex flex-col">
+                        {/* Type Badge */}
+                        <div className="mb-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${getTypeBadgeClass(currentDraft.type)}`}>
+                            {currentDraft.type}
+                          </span>
                         </div>
 
-                        {isExpanded && (
-                          <div className="mt-4 p-4 rounded-xl bg-secondary/50 border border-border font-mono text-xs text-muted-foreground">
-                            <p>---</p>
-                            <p className="mt-2">This request is made pursuant to applicable California consumer protection laws.</p>
-                            <p className="mt-2">Please confirm receipt and action within 45 days as required by law.</p>
-                            <p className="mt-4">Sincerely,</p>
-                            <p className="text-foreground">{userInfo?.name}</p>
-                            <p>{userInfo?.email}</p>
+                        {/* Title */}
+                        <h2 className="text-xl font-medium mb-3">{currentDraft.title}</h2>
+
+                        {/* Content Preview / Full */}
+                        <div className="flex-1 overflow-hidden">
+                          <div className={`text-sm text-muted-foreground ${isExpanded ? '' : 'line-clamp-4'}`}>
+                            {currentDraft.content}
                           </div>
-                        )}
+
+                          {isExpanded && (
+                            <div className="mt-4 p-4 rounded-xl bg-secondary/50 border border-border font-mono text-xs text-muted-foreground">
+                              <p>---</p>
+                              <p className="mt-2">This request is made pursuant to applicable California consumer protection laws.</p>
+                              <p className="mt-2">Please confirm receipt and action within 45 days as required by law.</p>
+                              <p className="mt-4">Sincerely,</p>
+                              <p className="text-foreground">{userInfo?.name}</p>
+                              <p>{userInfo?.email}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Expand Toggle */}
+                        <button
+                          onClick={() => setIsExpanded(!isExpanded)}
+                          className="mt-4 flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {isExpanded ? (
+                            <>
+                              <ChevronUp className="w-4 h-4" />
+                              Less details
+                            </>
+                          ) : (
+                            <>
+                              <ChevronDown className="w-4 h-4" />
+                              View full document
+                            </>
+                          )}
+                        </button>
                       </div>
 
-                      {/* Expand Toggle */}
-                      <button
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        className="mt-4 flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {isExpanded ? (
-                          <>
-                            <ChevronUp className="w-4 h-4" />
-                            Less details
-                          </>
-                        ) : (
-                          <>
-                            <ChevronDown className="w-4 h-4" />
-                            View full document
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {/* Drag Hint */}
-                    <div className="px-6 pb-4 text-center">
-                      <p className="text-xs text-muted-foreground">
-                        Swipe right to send • Swipe left to skip
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Error Message */}
-            {sendError && (
-              <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm text-center max-w-md">
-                {sendError}
+                      {/* Drag Hint */}
+                      <div className="px-6 pb-4 text-center">
+                        <p className="text-xs text-muted-foreground">
+                          Swipe right to send • Swipe left to skip
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            )}
 
-            {/* Action Buttons */}
-            <div className="mt-8 flex items-center gap-6">
-              <motion.button
-                whileHover={{ scale: isSending ? 1 : 1.1 }}
-                whileTap={{ scale: isSending ? 1 : 0.95 }}
-                onClick={() => handleSwipe('left')}
-                disabled={isSending}
-                className="w-16 h-16 rounded-full bg-white border-2 border-red-200 flex items-center justify-center text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <X className="w-7 h-7" />
-              </motion.button>
+              {/* Error Message */}
+              {sendError && (
+                <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm text-center max-w-md">
+                  {sendError}
+                </div>
+              )}
 
-              <motion.button
-                whileHover={{ scale: isSending ? 1 : 1.1 }}
-                whileTap={{ scale: isSending ? 1 : 0.95 }}
-                onClick={() => handleSwipe('right')}
-                disabled={isSending}
-                className="w-20 h-20 rounded-full bg-foreground flex items-center justify-center text-background shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isSending ? (
-                  <Loader2 className="w-8 h-8 animate-spin" />
-                ) : (
-                  <Send className="w-8 h-8" />
-                )}
-              </motion.button>
+              {/* Action Buttons */}
+              <div className="mt-8 flex items-center gap-6">
+                <motion.button
+                  whileHover={{ scale: isSending ? 1 : 1.1 }}
+                  whileTap={{ scale: isSending ? 1 : 0.95 }}
+                  onClick={() => handleSwipe('left')}
+                  disabled={isSending}
+                  className="w-16 h-16 rounded-full bg-white border-2 border-red-200 flex items-center justify-center text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <X className="w-7 h-7" />
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ scale: isSending ? 1 : 1.1 }}
+                  whileTap={{ scale: isSending ? 1 : 0.95 }}
+                  onClick={() => handleSwipe('right')}
+                  disabled={isSending}
+                  className="w-20 h-20 rounded-full bg-foreground flex items-center justify-center text-background shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                  {isSending ? (
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                  ) : (
+                    <Send className="w-8 h-8" />
+                  )}
+                </motion.button>
+              </div>
             </div>
-          </>
+
+            {/* Right side - PDF Viewer */}
+            <div className="flex-1 bg-white rounded-2xl border border-border overflow-hidden shadow-lg flex flex-col">
+              <div className="p-3 border-b border-border bg-secondary/30">
+                <h3 className="text-sm font-medium text-center">CPPA Complaint Form</h3>
+              </div>
+              <iframe
+                src="/cppa.pdf"
+                className="w-full flex-1 min-h-[600px]"
+                title="CPPA Complaint Form"
+              />
+            </div>
+          </div>
         ) : (
-          /* Completion State */
+          /* Completion State with PDF */
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center max-w-md"
+            className="flex gap-8 w-full max-w-6xl px-4"
           >
-            <div className="w-20 h-20 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center mx-auto mb-6">
-              <Check className="w-10 h-10 text-emerald-600" />
-            </div>
-            <h2 className="text-2xl font-medium mb-3">All done!</h2>
-            <p className="text-muted-foreground mb-8">
-              You've reviewed all {drafts.length} documents.
-              {sentCount > 0 && ` ${sentCount} will be sent to their respective counterparties.`}
-            </p>
+            {/* Left side - Completion message */}
+            <div className="flex-1 text-center flex flex-col justify-center">
+              <div className="w-20 h-20 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center mx-auto mb-6">
+                <Check className="w-10 h-10 text-emerald-600" />
+              </div>
+              <h2 className="text-2xl font-medium mb-3">All done!</h2>
+              <p className="text-muted-foreground mb-8">
+                You've reviewed all {drafts.length} documents.
+                {sentCount > 0 && ` ${sentCount} will be sent to their respective counterparties.`}
+              </p>
 
-            {/* Summary */}
-            <div className="p-4 rounded-2xl bg-white border border-border mb-8">
-              <div className="flex items-center justify-around">
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <Send className="w-4 h-4 text-emerald-600" />
-                    <span className="text-2xl font-medium text-emerald-600">{sentCount}</span>
+              {/* Summary */}
+              <div className="p-4 rounded-2xl bg-white border border-border mb-8 max-w-md mx-auto">
+                <div className="flex items-center justify-around">
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <Send className="w-4 h-4 text-emerald-600" />
+                      <span className="text-2xl font-medium text-emerald-600">{sentCount}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Sent</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">Sent</p>
-                </div>
-                <div className="w-px h-10 bg-border" />
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-2 mb-1">
-                    <X className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-2xl font-medium text-muted-foreground">{skippedCount}</span>
+                  <div className="w-px h-10 bg-border" />
+                  <div className="text-center">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      <X className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-2xl font-medium text-muted-foreground">{skippedCount}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Skipped</p>
                   </div>
-                  <p className="text-xs text-muted-foreground">Skipped</p>
                 </div>
               </div>
+
+              <button
+                onClick={() => setAppState('landing')}
+                className="btn-primary mx-auto"
+              >
+                <FileText className="w-4 h-4" />
+                Start New Scan
+              </button>
             </div>
 
-            <button
-              onClick={() => setAppState('landing')}
-              className="btn-primary"
-            >
-              <FileText className="w-4 h-4" />
-              Start New Scan
-            </button>
+            {/* Right side - PDF Viewer */}
+            <div className="flex-1 bg-white rounded-2xl border border-border overflow-hidden shadow-lg">
+              <div className="p-3 border-b border-border bg-secondary/30">
+                <h3 className="text-sm font-medium text-center">CPPA Complaint Form</h3>
+              </div>
+              <iframe
+                src="/cppa.pdf"
+                className="w-full h-[600px]"
+                title="CPPA Complaint Form"
+              />
+            </div>
           </motion.div>
         )}
       </main>
