@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Form Filler Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e4e4e7;
+      padding: 2rem;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(90deg, #f59e0b, #ef4444);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle { color: #a1a1aa; margin-bottom: 2rem; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: rgba(39, 39, 42, 0.7);
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid #3f3f46;
+    }
+    .card h2 { font-size: 1rem; margin-bottom: 1rem; color: #f59e0b; }
+
+    .upload-zone {
+      border: 2px dashed #3f3f46;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 1rem;
+    }
+    .upload-zone:hover { border-color: #f59e0b; background: rgba(245, 158, 11, 0.1); }
+    .upload-zone input { display: none; }
+    .upload-zone.has-file { border-color: #22c55e; background: rgba(34, 197, 94, 0.1); }
+
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      color: #a1a1aa;
+      margin-bottom: 0.5rem;
+    }
+    .form-group input, .form-group textarea {
+      width: 100%;
+      padding: 0.75rem;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      border-radius: 6px;
+      color: #e4e4e7;
+      font-size: 0.9rem;
+    }
+    .form-group input:focus, .form-group textarea:focus {
+      outline: none;
+      border-color: #f59e0b;
+    }
+    .form-group textarea { min-height: 100px; resize: vertical; }
+
+    .btn {
+      background: linear-gradient(90deg, #f59e0b, #ef4444);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 1rem;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn.secondary {
+      background: #3f3f46;
+      margin-top: 0.5rem;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .tab {
+      padding: 0.5rem 1rem;
+      background: transparent;
+      border: 1px solid #3f3f46;
+      border-radius: 6px;
+      color: #a1a1aa;
+      cursor: pointer;
+    }
+    .tab:hover { border-color: #f59e0b; color: #f59e0b; }
+    .tab.active { background: #f59e0b; border-color: #f59e0b; color: white; }
+
+    .status {
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+      display: none;
+    }
+    .status.loading { display: flex; align-items: center; gap: 0.5rem; background: rgba(96, 165, 250, 0.1); color: #60a5fa; }
+    .status.success { display: block; background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    .status.error { display: block; background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .result {
+      margin-top: 1.5rem;
+      display: none;
+    }
+    .result.active { display: block; }
+    .result-box {
+      background: #18181b;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    .result-box pre {
+      font-family: monospace;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .download-link {
+      display: inline-block;
+      background: #22c55e;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      text-decoration: none;
+      margin-top: 1rem;
+    }
+    .download-link:hover { opacity: 0.9; }
+
+    .field-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .field-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem;
+      background: #27272a;
+      border-radius: 4px;
+      margin-bottom: 0.5rem;
+      font-size: 0.85rem;
+    }
+    .field-item .type { color: #a78bfa; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PDF Form Filler</h1>
+    <p class="subtitle">Upload a PDF form and fill it with your data</p>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h2>1. Upload PDF Form</h2>
+          <div class="upload-zone" id="uploadZone">
+            <input type="file" id="fileInput" accept=".pdf">
+            <div id="uploadText">Drop a PDF form or click to browse</div>
+          </div>
+          <button class="btn secondary" id="detectBtn" disabled>Detect Form Fields</button>
+        </div>
+
+        <div class="card" style="margin-top: 1.5rem;">
+          <h2>2. Fill Method</h2>
+          <div class="tabs">
+            <button class="tab active" data-method="structured">Structured Data</button>
+            <button class="tab" data-method="natural">Natural Language</button>
+          </div>
+
+          <div id="structuredForm">
+            <div class="form-group">
+              <label>Full Name</label>
+              <input type="text" id="fieldName" placeholder="John Smith">
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="fieldEmail" placeholder="john@example.com">
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <input type="tel" id="fieldPhone" placeholder="555-123-4567">
+            </div>
+            <div class="form-group">
+              <label>Address</label>
+              <input type="text" id="fieldAddress" placeholder="123 Main St, City, ST 12345">
+            </div>
+            <div class="form-group">
+              <label>Date</label>
+              <input type="text" id="fieldDate" placeholder="January 15, 2024">
+            </div>
+            <div class="form-group">
+              <label>Additional Fields (JSON)</label>
+              <textarea id="additionalFields" placeholder='{"SSN": "***-**-1234", "Account Number": "12345"}'></textarea>
+            </div>
+          </div>
+
+          <div id="naturalForm" style="display: none;">
+            <div class="form-group">
+              <label>Fill Instructions</label>
+              <textarea id="instructions" placeholder="Fill the name field with John Smith. Set the email to john@example.com. Check the 'I agree' checkbox. Set the date to January 15, 2024."></textarea>
+            </div>
+          </div>
+
+          <button class="btn" id="fillBtn" disabled>Fill Form</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>Detected Fields</h2>
+          <div id="detectedFields" class="field-list">
+            <p style="color: #71717a; font-size: 0.9rem;">Upload a PDF and click "Detect Form Fields" to see available fields</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 1.5rem;">
+          <h2>Status</h2>
+          <div class="status" id="status">
+            <div class="spinner"></div>
+            <span id="statusText">Processing...</span>
+          </div>
+
+          <div class="result" id="result">
+            <p style="color: #22c55e;">Form filled successfully!</p>
+            <a class="download-link" id="downloadLink" href="#" target="_blank">Download Filled PDF</a>
+            <div class="result-box">
+              <strong style="color: #a1a1aa;">Response:</strong>
+              <pre id="responseJson"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3001';
+    let selectedFile = null;
+    let fillMethod = 'structured';
+
+    // Elements
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const uploadText = document.getElementById('uploadText');
+    const detectBtn = document.getElementById('detectBtn');
+    const fillBtn = document.getElementById('fillBtn');
+    const detectedFields = document.getElementById('detectedFields');
+    const status = document.getElementById('status');
+    const statusText = document.getElementById('statusText');
+    const result = document.getElementById('result');
+    const downloadLink = document.getElementById('downloadLink');
+    const responseJson = document.getElementById('responseJson');
+
+    // File upload
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', (e) => e.preventDefault());
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    function handleFile(file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Please upload a PDF file');
+        return;
+      }
+      selectedFile = file;
+      uploadText.textContent = `Selected: ${file.name}`;
+      uploadZone.classList.add('has-file');
+      detectBtn.disabled = false;
+      fillBtn.disabled = false;
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        fillMethod = tab.dataset.method;
+        document.getElementById('structuredForm').style.display = fillMethod === 'structured' ? 'block' : 'none';
+        document.getElementById('naturalForm').style.display = fillMethod === 'natural' ? 'block' : 'none';
+      });
+    });
+
+    // Detect fields
+    detectBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      setStatus('loading', 'Detecting form fields...');
+      result.classList.remove('active');
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      try {
+        const response = await fetch(`${API_URL}/api/documents/forms/detect-file`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.message || 'Detection failed');
+        }
+
+        const fields = data.data.formSchema || [];
+        if (fields.length === 0) {
+          detectedFields.innerHTML = '<p style="color: #f59e0b;">No form fields detected. This might not be a fillable PDF form.</p>';
+        } else {
+          detectedFields.innerHTML = fields.map(field => `
+            <div class="field-item">
+              <span>${field.description || 'Unknown field'}</span>
+              <span class="type">${field.type || 'text'}</span>
+            </div>
+          `).join('');
+        }
+
+        setStatus('success', `Detected ${fields.length} form fields`);
+
+      } catch (error) {
+        setStatus('error', error.message);
+      }
+    });
+
+    // Fill form with SSE progress
+    fillBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      fillBtn.disabled = true;
+      result.classList.remove('active');
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      try {
+        let endpoint;
+
+        if (fillMethod === 'structured') {
+          // Build data object from form fields
+          const data = {};
+          const name = document.getElementById('fieldName').value;
+          const email = document.getElementById('fieldEmail').value;
+          const phone = document.getElementById('fieldPhone').value;
+          const address = document.getElementById('fieldAddress').value;
+          const date = document.getElementById('fieldDate').value;
+
+          if (name) data['Full Name'] = name;
+          if (email) data['Email'] = email;
+          if (phone) data['Phone'] = phone;
+          if (address) data['Address'] = address;
+          if (date) data['Date'] = date;
+
+          // Parse additional fields
+          const additionalText = document.getElementById('additionalFields').value;
+          if (additionalText) {
+            try {
+              const additional = JSON.parse(additionalText);
+              Object.assign(data, additional);
+            } catch {
+              throw new Error('Invalid JSON in Additional Fields');
+            }
+          }
+
+          if (Object.keys(data).length === 0) {
+            throw new Error('Please fill in at least one field');
+          }
+
+          formData.append('data', JSON.stringify(data));
+          endpoint = `${API_URL}/api/documents/forms/fill-file-with-data-sse`;
+
+        } else {
+          // Natural language
+          const instructions = document.getElementById('instructions').value;
+          if (!instructions) {
+            throw new Error('Please enter fill instructions');
+          }
+
+          formData.append('instructions', instructions);
+          endpoint = `${API_URL}/api/documents/forms/fill-file-sse`;
+        }
+
+        // Use SSE for live progress
+        setStatus('loading', 'Starting...');
+
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value);
+          const lines = text.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const event = JSON.parse(line.slice(6));
+
+                setStatus('loading', `${event.progress}% - ${event.message}`);
+
+                if (event.step === 'complete') {
+                  setStatus('success', 'Form filled successfully!');
+                  result.classList.add('active');
+                  downloadLink.href = event.result.documentUrl;
+                  responseJson.textContent = JSON.stringify(event.result, null, 2);
+                } else if (event.step === 'error') {
+                  setStatus('error', event.error);
+                }
+              } catch (e) {
+                console.error('Parse error:', e);
+              }
+            }
+          }
+        }
+
+      } catch (error) {
+        setStatus('error', error.message);
+      }
+
+      fillBtn.disabled = false;
+    });
+
+    function setStatus(type, message) {
+      status.className = `status ${type}`;
+      statusText.textContent = message;
+    }
+  </script>
+</body>
+</html>

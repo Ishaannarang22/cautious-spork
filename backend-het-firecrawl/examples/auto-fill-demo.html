@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Form Auto-Fill Demo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e4e4e7;
+      padding: 2rem;
+    }
+    .container { max-width: 1000px; margin: 0 auto; }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(90deg, #8b5cf6, #ec4899);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle { color: #a1a1aa; margin-bottom: 2rem; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: rgba(39, 39, 42, 0.7);
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid #3f3f46;
+    }
+    .card h2 { font-size: 1rem; margin-bottom: 1rem; color: #8b5cf6; }
+
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      color: #a1a1aa;
+      margin-bottom: 0.5rem;
+    }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%;
+      padding: 0.75rem;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      border-radius: 6px;
+      color: #e4e4e7;
+      font-size: 0.9rem;
+    }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+      outline: none;
+      border-color: #8b5cf6;
+    }
+    .form-group textarea { min-height: 100px; resize: vertical; }
+
+    .btn {
+      background: linear-gradient(90deg, #8b5cf6, #ec4899);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 0.5rem;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn.secondary {
+      background: #3f3f46;
+      margin-top: 0.5rem;
+    }
+
+    .status {
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+      display: none;
+    }
+    .status.loading { display: flex; align-items: center; gap: 0.5rem; background: rgba(139, 92, 246, 0.1); color: #a78bfa; }
+    .status.success { display: block; background: rgba(34, 197, 94, 0.1); color: #22c55e; }
+    .status.error { display: block; background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .progress-bar {
+      height: 6px;
+      background: #27272a;
+      border-radius: 3px;
+      margin-top: 0.5rem;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #8b5cf6, #ec4899);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .result {
+      margin-top: 1.5rem;
+      display: none;
+    }
+    .result.active { display: block; }
+
+    .selection-box {
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid #8b5cf6;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .selection-box h3 { color: #a78bfa; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .selection-box .form-name { color: #e4e4e7; font-size: 1.1rem; font-weight: 600; }
+    .selection-box .reasoning { color: #a1a1aa; font-size: 0.85rem; margin-top: 0.5rem; }
+    .selection-box .confidence {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      margin-top: 0.5rem;
+    }
+    .confidence.high { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .confidence.medium { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .confidence.low { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+    .download-link {
+      display: inline-block;
+      background: #22c55e;
+      color: white;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      text-decoration: none;
+      margin-top: 1rem;
+    }
+    .download-link:hover { opacity: 0.9; }
+
+    .catalog-list {
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .catalog-item {
+      padding: 0.75rem;
+      background: #27272a;
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+    }
+    .catalog-item .name { font-weight: 600; color: #e4e4e7; }
+    .catalog-item .desc { font-size: 0.8rem; color: #a1a1aa; margin-top: 0.25rem; }
+    .catalog-item .status-badge {
+      font-size: 0.7rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+      float: right;
+    }
+    .status-badge.available { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .status-badge.missing { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Smart Form Auto-Fill</h1>
+    <p class="subtitle">AI selects the best form for your situation and fills it automatically</p>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h2>1. Describe Your Situation</h2>
+          <div class="form-group">
+            <label>What happened? (The AI will choose the best form)</label>
+            <textarea id="description" placeholder="Example: I received a letter saying my data was exposed in the Equifax breach in 2017. I want to file a claim for the settlement."></textarea>
+          </div>
+          <button class="btn secondary" id="selectBtn">Preview Form Selection</button>
+        </div>
+
+        <div class="card" style="margin-top: 1.5rem;">
+          <h2>2. Your Information</h2>
+          <div class="form-group">
+            <label>Full Name</label>
+            <input type="text" id="fullName" placeholder="John Smith">
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="email" placeholder="john@example.com">
+          </div>
+          <div class="form-group">
+            <label>Phone</label>
+            <input type="tel" id="phone" placeholder="555-123-4567">
+          </div>
+          <div class="form-group">
+            <label>Address</label>
+            <input type="text" id="address" placeholder="123 Main St, City, ST 12345">
+          </div>
+          <div class="form-group">
+            <label>Date of Birth</label>
+            <input type="text" id="dob" placeholder="January 1, 1980">
+          </div>
+          <div class="form-group">
+            <label>Additional Details (optional)</label>
+            <textarea id="additionalDetails" placeholder="Any other relevant information..." style="min-height: 60px;"></textarea>
+          </div>
+          <button class="btn" id="autoFillBtn">Auto-Select & Fill Form</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>Available Forms</h2>
+          <div id="catalogList" class="catalog-list">
+            <p style="color: #71717a;">Loading form catalog...</p>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 1.5rem;">
+          <h2>Status</h2>
+          <div class="status" id="status">
+            <div class="spinner"></div>
+            <span id="statusText">Processing...</span>
+          </div>
+          <div class="progress-bar" id="progressBar" style="display: none;">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+
+          <div class="result" id="result">
+            <div class="selection-box" id="selectionBox">
+              <h3>Selected Form</h3>
+              <div class="form-name" id="selectedFormName">-</div>
+              <div class="reasoning" id="reasoning">-</div>
+              <span class="confidence" id="confidence">-</span>
+            </div>
+            <a class="download-link" id="downloadLink" href="#" target="_blank">Download Filled PDF</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3001';
+
+    // Load form catalog on page load
+    async function loadCatalog() {
+      try {
+        const response = await fetch(`${API_URL}/api/documents/forms/catalog`);
+        const data = await response.json();
+
+        if (data.success) {
+          const list = document.getElementById('catalogList');
+          list.innerHTML = data.data.forms.map(form => `
+            <div class="catalog-item">
+              <span class="status-badge ${form.fileAvailable ? 'available' : 'missing'}">
+                ${form.fileAvailable ? 'Ready' : 'No PDF'}
+              </span>
+              <div class="name">${form.name}</div>
+              <div class="desc">${form.description}</div>
+            </div>
+          `).join('');
+        }
+      } catch (error) {
+        document.getElementById('catalogList').innerHTML = `<p style="color: #ef4444;">Failed to load catalog: ${error.message}</p>`;
+      }
+    }
+    loadCatalog();
+
+    function setStatus(type, message) {
+      const status = document.getElementById('status');
+      const statusText = document.getElementById('statusText');
+      status.className = `status ${type}`;
+      statusText.textContent = message;
+    }
+
+    function setProgress(percent) {
+      const bar = document.getElementById('progressBar');
+      const fill = document.getElementById('progressFill');
+      bar.style.display = 'block';
+      fill.style.width = `${percent}%`;
+    }
+
+    // Preview form selection
+    document.getElementById('selectBtn').addEventListener('click', async () => {
+      const description = document.getElementById('description').value;
+      if (!description) {
+        alert('Please describe your situation first');
+        return;
+      }
+
+      setStatus('loading', 'Analyzing your situation...');
+      document.getElementById('result').classList.remove('active');
+
+      try {
+        const response = await fetch(`${API_URL}/api/documents/forms/select`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setStatus('success', 'Form selected!');
+          document.getElementById('result').classList.add('active');
+          document.getElementById('selectedFormName').textContent = data.data.selectedForm.name;
+          document.getElementById('reasoning').textContent = data.data.reasoning;
+          const conf = document.getElementById('confidence');
+          conf.textContent = `${data.data.confidence} confidence`;
+          conf.className = `confidence ${data.data.confidence}`;
+          document.getElementById('downloadLink').style.display = 'none';
+        } else {
+          setStatus('error', data.message || 'Selection failed');
+        }
+      } catch (error) {
+        setStatus('error', error.message);
+      }
+    });
+
+    // Auto-fill form
+    document.getElementById('autoFillBtn').addEventListener('click', async () => {
+      const description = document.getElementById('description').value;
+      if (!description) {
+        alert('Please describe your situation first');
+        return;
+      }
+
+      const userData = {
+        fullName: document.getElementById('fullName').value,
+        email: document.getElementById('email').value,
+        phone: document.getElementById('phone').value,
+        address: document.getElementById('address').value,
+        dateOfBirth: document.getElementById('dob').value,
+        additionalDetails: document.getElementById('additionalDetails').value,
+        date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+      };
+
+      // Remove empty fields
+      Object.keys(userData).forEach(key => {
+        if (!userData[key]) delete userData[key];
+      });
+
+      if (Object.keys(userData).length < 2) {
+        alert('Please fill in at least your name and one other field');
+        return;
+      }
+
+      setStatus('loading', 'Starting auto-fill...');
+      setProgress(0);
+      document.getElementById('result').classList.remove('active');
+      document.getElementById('autoFillBtn').disabled = true;
+
+      try {
+        const response = await fetch(`${API_URL}/api/documents/forms/auto-fill`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description, userData }),
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value);
+          const lines = text.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const event = JSON.parse(line.slice(6));
+                setProgress(event.progress);
+                setStatus('loading', event.message);
+
+                if (event.step === 'complete') {
+                  setStatus('success', 'Form filled successfully!');
+                  document.getElementById('result').classList.add('active');
+                  document.getElementById('selectedFormName').textContent = event.result.selectedForm.name;
+                  document.getElementById('reasoning').textContent = event.result.selectionReasoning;
+                  const conf = document.getElementById('confidence');
+                  conf.textContent = `${event.result.confidence} confidence`;
+                  conf.className = `confidence ${event.result.confidence}`;
+                  document.getElementById('downloadLink').href = event.result.documentUrl;
+                  document.getElementById('downloadLink').style.display = 'inline-block';
+                } else if (event.step === 'error') {
+                  setStatus('error', event.error);
+                }
+              } catch (e) {
+                console.error('Parse error:', e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        setStatus('error', error.message);
+      }
+
+      document.getElementById('autoFillBtn').disabled = false;
+    });
+  </script>
+</body>
+</html>

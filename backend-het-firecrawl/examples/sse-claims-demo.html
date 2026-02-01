@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claims Processing with SSE</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e4e4e7;
+      padding: 2rem;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 {
+      font-size: 1.8rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(90deg, #22c55e, #60a5fa);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle { color: #a1a1aa; margin-bottom: 2rem; }
+
+    .card {
+      background: rgba(39, 39, 42, 0.7);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      border: 1px solid #3f3f46;
+    }
+    .card h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #60a5fa; }
+
+    .upload-zone {
+      border: 2px dashed #3f3f46;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .upload-zone:hover { border-color: #60a5fa; background: rgba(96, 165, 250, 0.1); }
+    .upload-zone input { display: none; }
+    .file-name { margin-top: 1rem; color: #22c55e; }
+
+    .btn {
+      background: linear-gradient(90deg, #22c55e, #16a34a);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 1rem;
+      width: 100%;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .progress-container {
+      margin-top: 1.5rem;
+      display: none;
+    }
+    .progress-container.active { display: block; }
+
+    .progress-bar {
+      height: 8px;
+      background: #27272a;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #22c55e, #60a5fa);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem;
+      background: rgba(96, 165, 250, 0.1);
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+    }
+    .step-indicator.complete { background: rgba(34, 197, 94, 0.1); }
+    .step-indicator.error { background: rgba(239, 68, 68, 0.1); }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid transparent;
+      border-top-color: #60a5fa;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .event-log {
+      background: #18181b;
+      border-radius: 8px;
+      padding: 1rem;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.8rem;
+      margin-top: 1rem;
+    }
+    .event-log div {
+      padding: 0.25rem 0;
+      border-bottom: 1px solid #27272a;
+    }
+    .event-log .step { color: #60a5fa; }
+    .event-log .progress { color: #22c55e; }
+    .event-log .message { color: #a1a1aa; }
+
+    .result-container {
+      margin-top: 1.5rem;
+      display: none;
+    }
+    .result-container.active { display: block; }
+
+    .result-content {
+      background: #18181b;
+      border-radius: 8px;
+      padding: 1rem;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+    }
+
+    select {
+      width: 100%;
+      padding: 0.75rem;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+      border-radius: 6px;
+      color: #e4e4e7;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Claims Processing with SSE</h1>
+    <p class="subtitle">Real-time document processing with Server-Sent Events</p>
+
+    <div class="card">
+      <h2>1. Upload Document</h2>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg">
+        <div>Drop a document or click to browse</div>
+        <div class="file-name" id="fileName"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Select Extraction Type</h2>
+      <select id="schemaType">
+        <option value="claimInfo">Claim Information</option>
+        <option value="personalInfo">Personal Information</option>
+        <option value="financialInfo">Financial Information</option>
+        <option value="employmentInfo">Employment Information</option>
+        <option value="identityDocument">Identity Document</option>
+      </select>
+      <button class="btn" id="processBtn" disabled>Process Document</button>
+    </div>
+
+    <div class="card">
+      <h2>3. Progress</h2>
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="step-indicator" id="stepIndicator">
+          <div class="spinner" id="spinner"></div>
+          <span id="stepMessage">Waiting...</span>
+        </div>
+      </div>
+      <div class="event-log" id="eventLog">
+        <div style="color: #71717a;">Events will appear here...</div>
+      </div>
+    </div>
+
+    <div class="card result-container" id="resultContainer">
+      <h2>4. Results</h2>
+      <div class="result-content" id="resultContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3001';
+    let selectedFile = null;
+
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+    const schemaType = document.getElementById('schemaType');
+    const processBtn = document.getElementById('processBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressFill = document.getElementById('progressFill');
+    const stepIndicator = document.getElementById('stepIndicator');
+    const spinner = document.getElementById('spinner');
+    const stepMessage = document.getElementById('stepMessage');
+    const eventLog = document.getElementById('eventLog');
+    const resultContainer = document.getElementById('resultContainer');
+    const resultContent = document.getElementById('resultContent');
+
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); });
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    function handleFile(file) {
+      selectedFile = file;
+      fileName.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      processBtn.disabled = false;
+    }
+
+    function logEvent(step, progress, message) {
+      const div = document.createElement('div');
+      div.innerHTML = `<span class="step">[${step}]</span> <span class="progress">${progress}%</span> <span class="message">${message}</span>`;
+      eventLog.insertBefore(div, eventLog.firstChild);
+    }
+
+    processBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      processBtn.disabled = true;
+      progressContainer.classList.add('active');
+      resultContainer.classList.remove('active');
+      eventLog.innerHTML = '';
+      progressFill.style.width = '0%';
+      spinner.style.display = 'block';
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('schemaType', schemaType.value);
+
+      try {
+        const response = await fetch(`${API_URL}/api/claims/process`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value);
+          const lines = text.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                progressFill.style.width = `${data.progress}%`;
+                stepMessage.textContent = data.message;
+                logEvent(data.step, data.progress, data.message);
+
+                if (data.step === 'complete') {
+                  spinner.style.display = 'none';
+                  stepIndicator.classList.add('complete');
+                  resultContainer.classList.add('active');
+                  resultContent.textContent = JSON.stringify(data.result, null, 2);
+                } else if (data.step === 'error') {
+                  spinner.style.display = 'none';
+                  stepIndicator.classList.add('error');
+                  stepMessage.textContent = `Error: ${data.error}`;
+                }
+              } catch (e) {
+                console.error('Parse error:', e);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        spinner.style.display = 'none';
+        stepIndicator.classList.add('error');
+        stepMessage.textContent = `Error: ${error.message}`;
+      }
+
+      processBtn.disabled = false;
+    });
+  </script>
+</body>
+</html>

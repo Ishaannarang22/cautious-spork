@@ -1,0 +1,21 @@
+# Render Blueprint - https://render.com/docs/blueprint-spec
+# Deploy with: render.com/deploy?repo=<your-github-url>
+
+services:
+  - type: web
+    name: claim-compass-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: REDUCTO_API_KEY
+        sync: false  # Set manually in dashboard
+      - key: ANTHROPIC_API_KEY
+        sync: false  # Set manually in dashboard

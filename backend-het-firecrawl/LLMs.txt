@@ -1,0 +1,1516 @@
+# Claim Compass Backend API - Document Processing
+
+This document provides comprehensive API documentation for the Claim Compass backend document processing service powered by Reducto.
+
+## Base URL
+
+Development: `http://localhost:3001`
+Production: `https://claim-compass-api.onrender.com` (update after deployment)
+
+## Authentication
+
+Currently no authentication required for API endpoints. The backend handles Reducto API authentication internally.
+
+## SSE (Server-Sent Events) Endpoints
+
+These endpoints stream real-time progress updates during processing.
+
+### SSE Event Format
+
+All SSE endpoints emit events in this format:
+```json
+{
+  "step": "parsing" | "extracting" | "drafting" | "complete" | "error",
+  "progress": 0-100,
+  "message": "Human-readable status message",
+  "result": { ... },  // Only on "complete"
+  "error": "Error message"  // Only on "error"
+}
+```
+
+### POST /api/claims/process (SSE)
+
+Full document processing pipeline with progress updates.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body:
+  - `file` (required) - Document to process
+  - `schemaType` (optional) - One of: `personalInfo`, `financialInfo`, `employmentInfo`, `claimInfo`, `identityDocument`
+
+**SSE Events:**
+```
+data: {"step":"parsing","progress":10,"message":"Uploading document..."}
+data: {"step":"parsing","progress":40,"message":"Extracting text and tables..."}
+data: {"step":"extracting","progress":60,"message":"Extracting claimInfo fields..."}
+data: {"step":"complete","progress":100,"message":"Processing complete","result":{...}}
+```
+
+### POST /api/claims/analyze (SSE)
+
+Comprehensive document analysis extracting personal, claim, and financial info.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body: `file` (required)
+
+**Response result includes:**
+- `personalInfo` - Extracted personal details
+- `claimInfo` - Claim-related information
+- `financialInfo` - Financial data if present
+- `summary` - Boolean flags for what was found
+
+### POST /api/claims/draft (SSE)
+
+Parse user document, extract info, and fill a claim form automatically.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body:
+  - `userDocument` (required) - Document with user's personal info
+  - `claimForm` (required) - Blank claim form to fill
+
+**Response result includes:**
+- `filledFormUrl` - Download URL for the filled PDF
+- `extractedUserData` - Data extracted from user document
+- `fillInstructions` - Instructions used to fill the form
+
+### POST /api/claims/fill-form (SSE)
+
+Fill a claim form with provided structured data.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body:
+  - `file` (required) - Claim form PDF
+  - `userData` (required) - JSON string with field values
+
+**Example userData:**
+```json
+{
+  "Full Name": "John Smith",
+  "Email": "john@example.com",
+  "Phone": "555-1234",
+  "Address": "123 Main St, City, ST 12345"
+}
+```
+
+---
+
+## Frontend SSE Integration
+
+```typescript
+// React hook for SSE
+function useSSE<T>(url: string, formData: FormData) {
+  const [progress, setProgress] = useState(0);
+  const [step, setStep] = useState('');
+  const [message, setMessage] = useState('');
+  const [result, setResult] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const start = async () => {
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    while (reader) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const text = decoder.decode(value);
+      const lines = text.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = JSON.parse(line.slice(6));
+          setStep(data.step);
+          setProgress(data.progress);
+          setMessage(data.message);
+
+          if (data.step === 'complete') {
+            setResult(data.result);
+          } else if (data.step === 'error') {
+            setError(data.error);
+          }
+        }
+      }
+    }
+  };
+
+  return { start, progress, step, message, result, error };
+}
+```
+
+---
+
+## Examples
+
+See `examples/document-parser-demo.html` for a complete working example that demonstrates:
+- File upload with drag & drop
+- Document parsing with live results
+- Viewing parsed content (formatted, blocks, raw JSON)
+- Structured data extraction using pre-defined schemas
+- Error handling and loading states
+
+To run the example:
+1. Start the backend: `npm run dev`
+2. Open `examples/document-parser-demo.html` in a browser (or serve via Live Server)
+
+---
+
+## Health Check
+
+### GET /api/health
+
+Check if the API is running and which services are configured.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "message": "Claim Compass API is running",
+  "services": {
+    "reducto": true,
+    "firecrawl": false
+  }
+}
+```
+
+---
+
+## Document Processing Endpoints
+
+### POST /api/documents/upload
+
+Upload a document for later processing.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body: `file` (required) - The document file
+
+**Supported file types:**
+- PDF (`application/pdf`)
+- JPEG (`image/jpeg`)
+- PNG (`image/png`)
+- TIFF (`image/tiff`)
+- WebP (`image/webp`)
+- Excel (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `application/vnd.ms-excel`)
+- PowerPoint (`application/vnd.openxmlformats-officedocument.presentationml.presentation`)
+- Word (`application/vnd.openxmlformats-officedocument.wordprocessingml.document`)
+
+**Max file size:** 50MB
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "fileId": "abc123",
+    "url": "reducto://abc123",
+    "filename": "document.pdf",
+    "size": 1024000,
+    "mimetype": "application/pdf"
+  }
+}
+```
+
+**Frontend Usage Example:**
+```typescript
+const formData = new FormData();
+formData.append('file', selectedFile);
+
+const response = await fetch('/api/documents/upload', {
+  method: 'POST',
+  body: formData,
+});
+
+const { data } = await response.json();
+// Use data.url for subsequent parse/extract calls
+```
+
+---
+
+### POST /api/documents/parse
+
+Parse a document and extract all content (text, tables, figures).
+
+**Request:**
+- Content-Type: `application/json`
+- Body:
+```json
+{
+  "input": "https://example.com/document.pdf",  // URL or reducto:// reference
+  "options": {
+    "tableFormat": "json",  // "json" | "html" | "markdown" | "csv"
+    "enhance": {
+      "tables": true,
+      "figures": true
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "jobId": "job_abc123",
+    "duration": 2.5,
+    "pdfUrl": "https://...",
+    "studioLink": "https://studio.reducto.ai/...",
+    "usage": {
+      "num_pages": 5
+    },
+    "result": {
+      "chunks": [
+        {
+          "content": "Document text content...",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "Paragraph text...",
+              "bbox": { "x": 0, "y": 0, "width": 100, "height": 20 }
+            },
+            {
+              "type": "table",
+              "content": { "headers": [...], "rows": [...] }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+**Frontend Usage Example:**
+```typescript
+const response = await fetch('/api/documents/parse', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    input: uploadedFileUrl,
+    options: { tableFormat: 'json' }
+  }),
+});
+
+const { data } = await response.json();
+// Access parsed content in data.result.chunks
+```
+
+---
+
+### POST /api/documents/parse-file
+
+Upload and parse a document in one step.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body:
+  - `file` (required) - The document file
+  - `options` (optional) - JSON string of parsing options
+
+**Response:** Same as `/api/documents/parse`
+
+**Frontend Usage Example:**
+```typescript
+const formData = new FormData();
+formData.append('file', selectedFile);
+formData.append('options', JSON.stringify({ tableFormat: 'json' }));
+
+const response = await fetch('/api/documents/parse-file', {
+  method: 'POST',
+  body: formData,
+});
+```
+
+---
+
+### POST /api/documents/extract
+
+Extract structured data from a document using a custom JSON schema.
+
+**Request:**
+- Content-Type: `application/json`
+- Body:
+```json
+{
+  "input": "reducto://abc123",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "invoiceNumber": { "type": "string" },
+      "totalAmount": { "type": "number" },
+      "lineItems": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": { "type": "string" },
+            "amount": { "type": "number" }
+          }
+        }
+      }
+    }
+  },
+  "options": {
+    "systemPrompt": "Extract invoice details from this document",
+    "citations": true
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "jobId": "job_xyz789",
+    "studioLink": "https://studio.reducto.ai/...",
+    "usage": {
+      "num_pages": 1,
+      "num_fields": 5
+    },
+    "result": [
+      {
+        "invoiceNumber": "INV-2024-001",
+        "totalAmount": 1500.00,
+        "lineItems": [
+          { "description": "Service A", "amount": 500.00 },
+          { "description": "Service B", "amount": 1000.00 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Frontend Usage Example:**
+```typescript
+const schema = {
+  type: 'object',
+  properties: {
+    customerName: { type: 'string' },
+    accountNumber: { type: 'string' },
+    balance: { type: 'number' }
+  }
+};
+
+const response = await fetch('/api/documents/extract', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    input: uploadedFileUrl,
+    schema,
+    options: { systemPrompt: 'Extract account information' }
+  }),
+});
+```
+
+---
+
+### POST /api/documents/extract-file
+
+Upload and extract structured data in one step.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body:
+  - `file` (required) - The document file
+  - `schema` (required) - JSON string of extraction schema
+  - `options` (optional) - JSON string of extraction options
+
+**Response:** Same as `/api/documents/extract`
+
+---
+
+## Pre-defined Extraction Endpoints
+
+These endpoints use pre-built schemas for common document types. They accept the same request format but don't require a schema.
+
+### POST /api/documents/extract/personal-info
+
+Extract personal information (name, email, phone, address, DOB).
+
+**Request:**
+```json
+{
+  "input": "reducto://abc123"
+}
+```
+
+**Response includes:**
+- `fullName`
+- `email`
+- `phone`
+- `address` (street, city, state, zipCode, country)
+- `dateOfBirth`
+- `ssn` (last 4 digits only)
+
+---
+
+### POST /api/documents/extract/financial-info
+
+Extract financial data from bank statements, invoices, etc.
+
+**Response includes:**
+- `accountNumber`
+- `bankName`
+- `transactions` (array with date, description, amount, type)
+- `balance`
+- `statementDate`
+
+---
+
+### POST /api/documents/extract/employment-info
+
+Extract employment details from pay stubs, offer letters, etc.
+
+**Response includes:**
+- `employerName`
+- `employerAddress`
+- `employeeId`
+- `jobTitle`
+- `startDate`
+- `endDate`
+- `salary`
+- `payPeriod`
+
+---
+
+### POST /api/documents/extract/claim-info
+
+Extract claim-relevant information from legal documents.
+
+**Response includes:**
+- `claimType`
+- `companyInvolved`
+- `incidentDate`
+- `estimatedValue`
+- `deadline`
+- `caseNumber`
+- `eligibilityCriteria` (array)
+
+---
+
+### POST /api/documents/extract/identity
+
+Extract data from identity documents (driver's license, passport, etc.).
+
+**Response includes:**
+- `documentType`
+- `documentNumber`
+- `issuingAuthority`
+- `issueDate`
+- `expirationDate`
+- `fullName`
+- `dateOfBirth`
+- `address`
+
+---
+
+### POST /api/documents/split
+
+Split a document into sections based on natural language descriptions.
+
+**Request:**
+```json
+{
+  "input": "reducto://abc123",
+  "sections": [
+    "Cover page and introduction",
+    "Terms and conditions",
+    "Signature page"
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "sections": [
+      { "name": "Cover page and introduction", "pages": [1, 2] },
+      { "name": "Terms and conditions", "pages": [3, 4, 5] },
+      { "name": "Signature page", "pages": [6] }
+    ]
+  }
+}
+```
+
+---
+
+### GET /api/documents/job/:jobId
+
+Check the status of an async processing job.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "job_id": "job_abc123",
+    "status": "completed",
+    "result": { ... }
+  }
+}
+```
+
+---
+
+### GET /api/documents/schemas
+
+Get all available pre-defined extraction schemas.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "personalInfo": {
+      "name": "Personal Information",
+      "description": "Extract personal details like name, email, phone, address, DOB",
+      "schema": { ... }
+    },
+    "financialInfo": { ... },
+    "employmentInfo": { ... },
+    "claimInfo": { ... },
+    "identityDocument": { ... }
+  }
+}
+```
+
+---
+
+## Form Filling Endpoints
+
+These endpoints allow you to detect form fields in PDFs and fill them programmatically.
+
+### POST /api/documents/forms/detect
+
+Detect form fields in a PDF document.
+
+**Request:**
+```json
+{
+  "input": "https://example.com/form.pdf"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "documentUrl": "https://presigned-url-to-document...",
+    "formSchema": [
+      {
+        "type": "text",
+        "bbox": { "left": 0.1, "top": 0.2, "width": 0.3, "height": 0.05, "page": 1 },
+        "description": "Full Name",
+        "fill": true
+      },
+      {
+        "type": "checkbox",
+        "bbox": { "left": 0.1, "top": 0.3, "width": 0.02, "height": 0.02, "page": 1 },
+        "description": "I agree to terms",
+        "fill": true
+      }
+    ],
+    "usage": { "num_pages": 2 }
+  }
+}
+```
+
+### POST /api/documents/forms/detect-file
+
+Upload a PDF and detect its form fields.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body: `file` (required) - The PDF file
+
+**Response:** Same as `/api/documents/forms/detect`
+
+---
+
+### POST /api/documents/forms/fill
+
+Fill a PDF form using natural language instructions.
+
+**Request:**
+```json
+{
+  "input": "https://example.com/form.pdf",
+  "instructions": "Fill the form with: Name is John Smith, Email is john@example.com, Date is January 15, 2024, Check the 'I agree' checkbox"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "documentUrl": "https://presigned-url-to-filled-pdf...",
+    "formSchema": [...],
+    "usage": { "num_pages": 2 }
+  }
+}
+```
+
+### POST /api/documents/forms/fill-file
+
+Upload a PDF form and fill it using natural language instructions.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body:
+  - `file` (required) - The PDF form
+  - `instructions` (required) - Natural language fill instructions
+
+---
+
+### POST /api/documents/forms/fill-with-data
+
+Fill a PDF form with structured key-value data.
+
+**Request:**
+```json
+{
+  "input": "https://example.com/form.pdf",
+  "data": {
+    "Full Name": "John Smith",
+    "Email": "john@example.com",
+    "Phone": "555-1234",
+    "Date": "2024-01-15",
+    "I agree to terms": true
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "documentUrl": "https://presigned-url-to-filled-pdf...",
+    "formSchema": [...],
+    "usage": { "num_pages": 2 }
+  }
+}
+```
+
+### POST /api/documents/forms/fill-file-with-data
+
+Upload a PDF form and fill it with structured data.
+
+**Request:**
+- Content-Type: `multipart/form-data`
+- Body:
+  - `file` (required) - The PDF form
+  - `data` (required) - JSON string of key-value pairs
+
+**Frontend Usage Example:**
+```typescript
+// Fill form with structured data
+const formData = new FormData();
+formData.append('file', pdfFile);
+formData.append('data', JSON.stringify({
+  'Full Name': 'John Smith',
+  'Email': 'john@example.com',
+  'SSN': '***-**-1234',
+  'Date of Birth': '1990-01-15'
+}));
+
+const response = await fetch('/api/documents/forms/fill-file-with-data', {
+  method: 'POST',
+  body: formData,
+});
+
+const { data } = await response.json();
+// data.documentUrl contains the filled PDF download link
+window.open(data.documentUrl, '_blank');
+```
+
+---
+
+## Error Handling
+
+All endpoints return errors in this format:
+
+```json
+{
+  "error": "Error message",
+  "message": "Detailed error description"
+}
+```
+
+**Common HTTP Status Codes:**
+- `400` - Bad request (missing required fields)
+- `415` - Unsupported file type
+- `500` - Server error (usually Reducto API error)
+
+---
+
+## Frontend Integration Patterns
+
+### Pattern 1: Upload then Process
+
+Best for when you need to process the same document multiple times.
+
+```typescript
+// Step 1: Upload
+const uploadRes = await fetch('/api/documents/upload', {
+  method: 'POST',
+  body: formData,
+});
+const { data: uploadData } = await uploadRes.json();
+
+// Step 2: Parse (can reuse uploadData.url multiple times)
+const parseRes = await fetch('/api/documents/parse', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ input: uploadData.url }),
+});
+
+// Step 3: Extract specific data
+const extractRes = await fetch('/api/documents/extract/personal-info', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ input: uploadData.url }),
+});
+```
+
+### Pattern 2: Direct Processing
+
+Best for one-time document processing.
+
+```typescript
+const formData = new FormData();
+formData.append('file', file);
+
+const response = await fetch('/api/documents/parse-file', {
+  method: 'POST',
+  body: formData,
+});
+```
+
+### Pattern 3: Custom Schema Extraction
+
+For extracting specific fields not covered by pre-defined schemas.
+
+```typescript
+const customSchema = {
+  type: 'object',
+  properties: {
+    settlementName: { type: 'string', description: 'Name of the settlement' },
+    claimDeadline: { type: 'string', description: 'Last date to submit claim' },
+    maxPayout: { type: 'number', description: 'Maximum possible payout' },
+    affectedProducts: {
+      type: 'array',
+      items: { type: 'string' },
+      description: 'Products included in the settlement'
+    }
+  }
+};
+
+const response = await fetch('/api/documents/extract', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    input: documentUrl,
+    schema: customSchema,
+    options: {
+      systemPrompt: 'Extract class action settlement details from this notice'
+    }
+  }),
+});
+```
+
+---
+
+## React Hook Example
+
+```typescript
+import { useState } from 'react';
+
+interface DocumentResult {
+  success: boolean;
+  data: any;
+}
+
+export function useDocumentProcessor() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const uploadAndParse = async (file: File): Promise<DocumentResult | null> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/documents/parse-file', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process document');
+      }
+
+      return await response.json();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const extractPersonalInfo = async (input: string): Promise<DocumentResult | null> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/documents/extract/personal-info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to extract data');
+      }
+
+      return await response.json();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return {
+    loading,
+    error,
+    uploadAndParse,
+    extractPersonalInfo,
+  };
+}
+```
+
+---
+
+## TypeScript Types
+
+```typescript
+// Upload response
+interface UploadResponse {
+  success: boolean;
+  data: {
+    fileId: string;
+    url: string;  // reducto:// prefixed
+    filename: string;
+    size: number;
+    mimetype: string;
+  };
+}
+
+// Parse response
+interface ParseResponse {
+  success: boolean;
+  data: {
+    jobId: string;
+    duration: number;
+    pdfUrl: string | null;
+    studioLink: string | null;
+    usage: {
+      num_pages: number;
+    };
+    result: {
+      chunks: ParseChunk[];
+    };
+  };
+}
+
+interface ParseChunk {
+  content: string;
+  blocks: ParseBlock[];
+}
+
+interface ParseBlock {
+  type: 'text' | 'table' | 'figure' | 'header' | 'footer' | 'title';
+  content: any;
+  bbox?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+// Extract response
+interface ExtractResponse<T = any> {
+  success: boolean;
+  data: {
+    jobId: string;
+    studioLink: string | null;
+    usage: {
+      num_pages: number;
+      num_fields: number;
+    };
+    result: T[];
+  };
+}
+
+// Pre-defined schema types
+interface PersonalInfo {
+  fullName?: string;
+  email?: string;
+  phone?: string;
+  address?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+  };
+  dateOfBirth?: string;
+  ssn?: string;
+}
+
+interface FinancialInfo {
+  accountNumber?: string;
+  bankName?: string;
+  transactions?: Array<{
+    date: string;
+    description: string;
+    amount: number;
+    type: 'credit' | 'debit';
+  }>;
+  balance?: number;
+  statementDate?: string;
+}
+
+interface EmploymentInfo {
+  employerName?: string;
+  employerAddress?: string;
+  employeeId?: string;
+  jobTitle?: string;
+  startDate?: string;
+  endDate?: string;
+  salary?: number;
+  payPeriod?: string;
+}
+
+interface ClaimInfo {
+  claimType?: string;
+  companyInvolved?: string;
+  incidentDate?: string;
+  estimatedValue?: number;
+  deadline?: string;
+  caseNumber?: string;
+  eligibilityCriteria?: string[];
+}
+
+interface IdentityDocument {
+  documentType?: 'drivers_license' | 'passport' | 'state_id' | 'military_id' | 'other';
+  documentNumber?: string;
+  issuingAuthority?: string;
+  issueDate?: string;
+  expirationDate?: string;
+  fullName?: string;
+  dateOfBirth?: string;
+  address?: string;
+}
+```
+
+---
+
+## LLM-Based Form Selection (Auto-Fill)
+
+The system includes intelligent form selection powered by an LLM. Given a user's situation description, the AI will:
+1. Analyze available form templates
+2. Select the most appropriate form
+3. Fill it with the provided user data
+
+### GET /api/documents/forms/catalog
+
+Get all available form templates with their status.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "forms": [
+      {
+        "id": "data-breach-claim",
+        "name": "Data Breach Claim Form",
+        "description": "For claiming compensation when your personal data was exposed in a data breach",
+        "useCases": ["Personal data was exposed in a hack or breach", ...],
+        "requiredFields": ["fullName", "email", "breachDate", "companyName", "dataTypesExposed"],
+        "optionalFields": ["ssn", "accountNumber", "damages"],
+        "claimTypes": ["data_breach", "identity_theft", "privacy_violation"],
+        "fileAvailable": true
+      },
+      ...
+    ],
+    "totalForms": 6,
+    "availableForms": 2
+  }
+}
+```
+
+### POST /api/documents/forms/select
+
+Use LLM to select the best form based on user's situation.
+
+**Request:**
+```json
+{
+  "description": "I received a letter saying my data was exposed in the Equifax breach in 2017. I want to file a claim for the settlement.",
+  "claimType": "data_breach",  // optional hint
+  "userData": {                 // optional - helps with selection
+    "fullName": "John Smith"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "selectedForm": {
+      "id": "data-breach-claim",
+      "name": "Data Breach Claim Form",
+      "description": "For claiming compensation when your personal data was exposed",
+      "requiredFields": ["fullName", "email", "breachDate", "companyName", "dataTypesExposed"],
+      "optionalFields": ["ssn", "accountNumber", "damages"]
+    },
+    "confidence": "high",
+    "reasoning": "The user is describing a data breach incident where their personal information was exposed, which matches the data breach claim form's use case.",
+    "alternativeForms": [
+      { "id": "class-action-claim", "name": "Class Action Claim Form", "description": "..." }
+    ],
+    "missingInfo": ["breachDate", "dataTypesExposed"]
+  }
+}
+```
+
+### POST /api/documents/forms/auto-fill (SSE)
+
+Complete auto-fill flow: LLM selects form + fills it with user data.
+
+**Request:**
+```json
+{
+  "description": "I received a letter saying my data was exposed in the Equifax breach in 2017.",
+  "userData": {
+    "fullName": "John Smith",
+    "email": "john@example.com",
+    "phone": "555-123-4567",
+    "address": "123 Main St, City, ST 12345",
+    "dateOfBirth": "January 1, 1980"
+  },
+  "claimType": "data_breach"  // optional
+}
+```
+
+**SSE Events:**
+```
+data: {"step":"analyzing","progress":10,"message":"Analyzing your situation..."}
+data: {"step":"selected","progress":25,"message":"Selected form: Data Breach Claim Form"}
+data: {"step":"loading","progress":35,"message":"Loading form template..."}
+data: {"step":"uploading","progress":45,"message":"Uploading form to processor..."}
+data: {"step":"preparing","progress":55,"message":"Preparing fill instructions..."}
+data: {"step":"filling","progress":65,"message":"Filling 5 fields (this may take 30-60 seconds)..."}
+data: {"step":"finalizing","progress":95,"message":"Generating filled PDF..."}
+data: {"step":"complete","progress":100,"message":"Form filled successfully","result":{...}}
+```
+
+**Complete Response Result:**
+```json
+{
+  "selectedForm": {
+    "id": "data-breach-claim",
+    "name": "Data Breach Claim Form"
+  },
+  "selectionReasoning": "The user is describing a data breach incident...",
+  "confidence": "high",
+  "documentUrl": "https://presigned-url-to-filled-pdf...",
+  "formSchema": [...],
+  "usage": { "num_pages": 2 },
+  "fieldsFilledCount": 5,
+  "alternativeForms": [...]
+}
+```
+
+### GET /api/documents/forms/template/:formId
+
+Download a blank form template PDF.
+
+**Example:**
+```
+GET /api/documents/forms/template/data-breach-claim
+```
+
+**Response:** The PDF file as attachment
+
+---
+
+## Form Catalog Configuration
+
+Forms are defined in `src/config/formCatalog.js`. Each form has:
+
+| Property | Description |
+|----------|-------------|
+| `id` | Unique identifier |
+| `name` | Human-readable name |
+| `filename` | PDF filename in `src/forms/` |
+| `description` | What the form is for |
+| `useCases` | Array of situations this form applies to |
+| `requiredFields` | Fields that must be filled |
+| `optionalFields` | Fields that can be filled |
+| `claimTypes` | Keywords for matching (data_breach, class_action, etc.) |
+
+### Available Form Types
+
+1. **data-breach-claim** - Data breach compensation claims
+2. **class-action-claim** - Class action lawsuit claims
+3. **unclaimed-property** - Unclaimed property/escheatment claims
+4. **insurance-claim** - Insurance policy claims
+5. **consumer-complaint** - Consumer protection complaints
+6. **employment-claim** - Employment/labor claims
+
+### Adding a New Form
+
+1. Add form entry to `src/config/formCatalog.js`
+2. Place the fillable PDF in `src/forms/` with matching filename
+3. Form appears automatically in the catalog API
+
+---
+
+## Frontend Auto-Fill Integration
+
+```typescript
+async function autoFillClaim(description: string, userData: Record<string, string>) {
+  const response = await fetch('/api/documents/forms/auto-fill', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description, userData }),
+  });
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+
+  while (reader) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const text = decoder.decode(value);
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        const event = JSON.parse(line.slice(6));
+
+        console.log(`${event.progress}% - ${event.message}`);
+
+        if (event.step === 'complete') {
+          // Download the filled form
+          window.open(event.result.documentUrl, '_blank');
+        }
+      }
+    }
+  }
+}
+
+// Usage
+autoFillClaim(
+  "My data was exposed in the Equifax breach",
+  {
+    fullName: "John Smith",
+    email: "john@example.com",
+    phone: "555-1234"
+  }
+);
+```
+
+---
+
+## Internal Architecture: How LLM Form Selection Works
+
+This section documents the internal implementation for LLM context.
+
+### Files Involved
+
+| File | Purpose |
+|------|---------|
+| `src/config/formCatalog.js` | Form registry with metadata for all available forms |
+| `src/services/formSelector.js` | LLM-powered selection logic using Anthropic Claude |
+| `src/routes/documents.js` | API endpoints including `/forms/select` and `/forms/auto-fill` |
+| `src/forms/` | Directory containing actual PDF templates |
+
+### Form Catalog Structure
+
+Each form in `formCatalog.js` has this structure:
+
+```javascript
+{
+  id: 'data-breach-claim',                    // Unique identifier
+  name: 'Data Breach Claim Form',             // Display name
+  filename: 'data-breach-claim.pdf',          // PDF file in src/forms/
+  description: 'For claiming compensation...', // What it's for
+  useCases: [                                  // Situations this form applies to
+    'Personal data was exposed in a hack or breach',
+    'Company notified user of data compromise',
+    'Identity theft resulting from data exposure',
+  ],
+  requiredFields: ['fullName', 'email', 'breachDate', 'companyName'],
+  optionalFields: ['ssn', 'accountNumber', 'damages'],
+  claimTypes: ['data_breach', 'identity_theft', 'privacy_violation'],
+}
+```
+
+### The 6 Available Form Types
+
+```javascript
+// From src/config/formCatalog.js
+const formCatalog = [
+  {
+    id: 'data-breach-claim',
+    name: 'Data Breach Claim Form',
+    claimTypes: ['data_breach', 'identity_theft', 'privacy_violation'],
+  },
+  {
+    id: 'class-action-claim',
+    name: 'Class Action Claim Form',
+    claimTypes: ['class_action', 'consumer_protection', 'securities', 'employment'],
+  },
+  {
+    id: 'unclaimed-property',
+    name: 'Unclaimed Property Claim Form',
+    claimTypes: ['unclaimed_property', 'escheatment', 'forgotten_assets'],
+  },
+  {
+    id: 'insurance-claim',
+    name: 'Insurance Claim Form',
+    claimTypes: ['insurance', 'health_insurance', 'auto_insurance', 'home_insurance'],
+  },
+  {
+    id: 'consumer-complaint',
+    name: 'Consumer Complaint Form',
+    claimTypes: ['consumer_complaint', 'fraud', 'deceptive_practices', 'refund'],
+  },
+  {
+    id: 'employment-claim',
+    name: 'Employment/Labor Claim Form',
+    claimTypes: ['employment', 'wage_theft', 'discrimination', 'wrongful_termination'],
+  },
+];
+```
+
+### LLM Selection Mechanism
+
+**API:** Anthropic Claude (`claude-sonnet-4-20250514`)
+**SDK:** `@anthropic-ai/sdk`
+**Env Variable:** `ANTHROPIC_API_KEY`
+
+**The exact prompt sent to Claude:**
+
+```javascript
+// From src/services/formSelector.js - selectBestForm()
+
+const prompt = `You are a legal claims assistant. Based on the user's situation, select the most appropriate form from the available options.
+
+AVAILABLE FORMS:
+${JSON.stringify(catalogSummary, null, 2)}
+
+USER'S SITUATION:
+${userContext.description || 'Not provided'}
+
+${userContext.claimType ? `CLAIM TYPE HINT: ${userContext.claimType}` : ''}
+
+${userContext.userData ? `USER DATA PROVIDED:\n${JSON.stringify(userContext.userData, null, 2)}` : ''}
+
+Analyze the user's situation and respond with a JSON object containing:
+1. "selectedFormId": The ID of the best matching form
+2. "confidence": Your confidence level (high/medium/low)
+3. "reasoning": Brief explanation of why this form is the best fit
+4. "alternativeForms": Array of other form IDs that might also work (if any)
+5. "missingInfo": Array of information the user should provide for this form
+
+Respond ONLY with valid JSON, no markdown or explanation.`;
+```
+
+**Claude returns:**
+```json
+{
+  "selectedFormId": "data-breach-claim",
+  "confidence": "high",
+  "reasoning": "The user describes a data breach where personal information was exposed in the Equifax incident, which directly matches the data breach claim form's primary use case.",
+  "alternativeForms": ["class-action-claim"],
+  "missingInfo": ["breachDate", "dataTypesExposed"]
+}
+```
+
+### Selection Flow
+
+```
+1. User calls POST /api/documents/forms/select
+   └─> { description: "My data was exposed in Equifax breach" }
+
+2. formSelector.selectBestForm() is called
+   └─> Builds prompt with form catalog + user description
+   └─> Sends to Claude API
+
+3. Claude analyzes and returns JSON
+   └─> { selectedFormId, confidence, reasoning, ... }
+
+4. Backend enriches response with full form details
+   └─> Looks up form by ID from catalog
+   └─> Returns complete form metadata + selection reasoning
+```
+
+### Auto-Fill Flow (Complete Pipeline)
+
+```
+POST /api/documents/forms/auto-fill
+│
+├─ Step 1: LLM Selection (10-25%)
+│  └─> selectBestForm() calls Claude
+│  └─> Returns: data-breach-claim
+│
+├─ Step 2: Load PDF Template (25-35%)
+│  └─> formFileExists(formId)
+│  └─> getFormFileBuffer(formId)
+│  └─> Reads src/forms/data-breach-claim.pdf
+│
+├─ Step 3: Upload to Reducto (35-55%)
+│  └─> toFile(buffer, filename)
+│  └─> client.upload({ file })
+│  └─> Returns: reducto://file_id
+│
+├─ Step 4: Build Fill Instructions (55-65%)
+│  └─> buildFieldMappings(userData, form)
+│  └─> Maps user fields to form fields
+│  └─> Creates natural language instructions
+│
+├─ Step 5: Fill Form via Reducto (65-95%)
+│  └─> client.edit.run({ document_url, edit_instructions })
+│  └─> Takes 30-60 seconds
+│  └─> Returns filled PDF URL
+│
+└─ Step 6: Return Result (100%)
+   └─> { documentUrl, selectedForm, reasoning, ... }
+```
+
+### Field Mapping Logic
+
+User data fields are mapped to form fields using aliases:
+
+```javascript
+// From src/routes/documents.js - buildFieldMappings()
+
+const fieldAliases = {
+  fullName: ['name', 'fullName', 'full_name', 'Full Name', 'applicantName'],
+  email: ['email', 'Email', 'emailAddress', 'e-mail'],
+  phone: ['phone', 'Phone', 'phoneNumber', 'telephone', 'tel'],
+  address: ['address', 'Address', 'streetAddress', 'homeAddress'],
+  dateOfBirth: ['dateOfBirth', 'dob', 'DOB', 'birthDate', 'Date of Birth'],
+  ssn: ['ssn', 'SSN', 'socialSecurity'],
+  date: ['date', 'Date', 'currentDate', 'signatureDate', 'today'],
+};
+
+// Example: userData = { name: "John", DOB: "1990-01-01" }
+// Maps to: { fullName: "John", dateOfBirth: "1990-01-01" }
+```
+
+### Environment Variables Required
+
+```bash
+# .env file
+REDUCTO_API_KEY=xxx     # For PDF parsing and form filling
+ANTHROPIC_API_KEY=xxx   # For LLM-based form selection
+```
+
+### API Dependency Chain
+
+```
+Form Selection:
+  POST /forms/select
+    └─> Anthropic Claude API (claude-sonnet-4-20250514)
+
+Form Filling:
+  POST /forms/fill-file, /forms/auto-fill
+    └─> Reducto API (client.upload, client.edit.run)
+
+Auto-Fill (combines both):
+  POST /forms/auto-fill
+    └─> Anthropic (selection) + Reducto (filling)
+```
+
+### Error Handling
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `ANTHROPIC_API_KEY not set` | Missing env var | Add key to .env |
+| `Form template not available` | PDF not in src/forms/ | Upload the PDF file |
+| `No form fields detected` | PDF isn't fillable | Use a fillable PDF form |
+| `Failed to parse LLM response` | Claude returned invalid JSON | Retry or check prompt |
+
+### Demo Pages
+
+| Page | URL | Purpose |
+|------|-----|---------|
+| `auto-fill-demo.html` | `/examples/auto-fill-demo.html` | Test LLM selection + auto-fill |
+| `form-filler-demo.html` | `/examples/form-filler-demo.html` | Test manual form filling |
+| `sse-claims-demo.html` | `/examples/sse-claims-demo.html` | Test SSE document processing |
+| `document-parser-demo.html` | `/examples/document-parser-demo.html` | Test parsing & extraction |
+
+---
+
+## Complete API Endpoint Summary
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/documents/upload` | Upload document | - |
+| POST | `/api/documents/parse` | Parse document by URL | - |
+| POST | `/api/documents/parse-file` | Upload & parse | - |
+| POST | `/api/documents/extract` | Extract with custom schema | - |
+| POST | `/api/documents/extract-file` | Upload & extract | - |
+| POST | `/api/documents/extract/personal-info` | Extract personal info | - |
+| POST | `/api/documents/extract/financial-info` | Extract financial info | - |
+| POST | `/api/documents/extract/employment-info` | Extract employment info | - |
+| POST | `/api/documents/extract/claim-info` | Extract claim info | - |
+| POST | `/api/documents/extract/identity` | Extract identity doc | - |
+| POST | `/api/documents/split` | Split document | - |
+| GET | `/api/documents/job/:jobId` | Get job status | - |
+| GET | `/api/documents/schemas` | List schemas | - |
+| POST | `/api/documents/forms/detect` | Detect form fields | - |
+| POST | `/api/documents/forms/detect-file` | Upload & detect | - |
+| POST | `/api/documents/forms/fill` | Fill form (NL) | - |
+| POST | `/api/documents/forms/fill-file` | Upload & fill (NL) | - |
+| POST | `/api/documents/forms/fill-with-data` | Fill form (JSON) | - |
+| POST | `/api/documents/forms/fill-file-with-data` | Upload & fill (JSON) | - |
+| POST | `/api/documents/forms/fill-file-sse` | Fill with SSE progress | - |
+| POST | `/api/documents/forms/fill-file-with-data-sse` | Fill (JSON) with SSE | - |
+| GET | `/api/documents/forms/catalog` | List form templates | - |
+| POST | `/api/documents/forms/select` | LLM selects best form | Anthropic |
+| POST | `/api/documents/forms/auto-fill` | LLM select + fill (SSE) | Anthropic + Reducto |
+| GET | `/api/documents/forms/template/:formId` | Download blank form | - |
+| POST | `/api/claims/process` | Full pipeline (SSE) | - |
+| POST | `/api/claims/analyze` | Analyze document (SSE) | - |
+| POST | `/api/claims/draft` | Draft claim (SSE) | - |
+| POST | `/api/claims/fill-form` | Fill claim form (SSE) | - |

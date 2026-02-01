@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reducto Document Parser Test</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      min-height: 100vh;
+      color: #e4e4e7;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(90deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: #a1a1aa;
+      margin-bottom: 2rem;
+    }
+
+    .upload-zone {
+      border: 2px dashed #3f3f46;
+      border-radius: 12px;
+      padding: 3rem;
+      text-align: center;
+      transition: all 0.3s ease;
+      background: rgba(39, 39, 42, 0.5);
+      cursor: pointer;
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: #60a5fa;
+      background: rgba(96, 165, 250, 0.1);
+    }
+
+    .upload-zone input {
+      display: none;
+    }
+
+    .upload-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+
+    .upload-text {
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .upload-hint {
+      color: #71717a;
+      font-size: 0.9rem;
+    }
+
+    .file-info {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: rgba(96, 165, 250, 0.1);
+      border-radius: 8px;
+      display: none;
+    }
+
+    .file-info.visible {
+      display: block;
+    }
+
+    .btn {
+      background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+      color: white;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 1rem;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(96, 165, 250, 0.4);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .results-container {
+      margin-top: 2rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 900px) {
+      .results-container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .result-panel {
+      background: rgba(39, 39, 42, 0.7);
+      border-radius: 12px;
+      padding: 1.5rem;
+      border: 1px solid #3f3f46;
+    }
+
+    .result-panel h2 {
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .result-content {
+      background: #18181b;
+      border-radius: 8px;
+      padding: 1rem;
+      max-height: 500px;
+      overflow-y: auto;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .result-content.markdown {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 0.95rem;
+    }
+
+    .result-content h2 {
+      color: #60a5fa;
+      font-size: 1.3rem;
+      margin: 1rem 0 0.5rem;
+      border-bottom: 1px solid #3f3f46;
+      padding-bottom: 0.5rem;
+    }
+
+    .result-content p {
+      margin-bottom: 1rem;
+      color: #d4d4d8;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 1rem;
+      border-radius: 8px;
+      margin-top: 1rem;
+    }
+
+    .status.loading {
+      background: rgba(96, 165, 250, 0.1);
+      color: #60a5fa;
+    }
+
+    .status.success {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+    }
+
+    .status.error {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .meta-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .meta-card {
+      background: #18181b;
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .meta-card .value {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: #60a5fa;
+    }
+
+    .meta-card .label {
+      font-size: 0.8rem;
+      color: #71717a;
+      margin-top: 0.25rem;
+    }
+
+    .block-item {
+      background: #27272a;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      border-left: 3px solid #3b82f6;
+    }
+
+    .block-type {
+      font-size: 0.75rem;
+      color: #a78bfa;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+
+    .block-content {
+      color: #e4e4e7;
+    }
+
+    .confidence {
+      font-size: 0.75rem;
+      color: #22c55e;
+      margin-top: 0.5rem;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .tab {
+      padding: 0.5rem 1rem;
+      background: transparent;
+      border: 1px solid #3f3f46;
+      border-radius: 6px;
+      color: #a1a1aa;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab:hover {
+      border-color: #60a5fa;
+      color: #60a5fa;
+    }
+
+    .tab.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: white;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    a {
+      color: #60a5fa;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Reducto Document Parser</h1>
+    <p class="subtitle">Upload a PDF, image, or document to extract text, tables, and structured data</p>
+
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept=".pdf,.png,.jpg,.jpeg,.tiff,.webp,.xlsx,.xls,.pptx,.docx">
+      <div class="upload-icon">📄</div>
+      <div class="upload-text">Drop your document here or click to browse</div>
+      <div class="upload-hint">Supports PDF, images, Excel, PowerPoint, Word</div>
+      <div class="file-info" id="fileInfo">
+        <strong id="fileName"></strong> (<span id="fileSize"></span>)
+      </div>
+    </div>
+
+    <button class="btn" id="parseBtn" disabled>Parse Document</button>
+
+    <div class="status hidden" id="status">
+      <div class="spinner"></div>
+      <span id="statusText">Processing...</span>
+    </div>
+
+    <div class="results-container hidden" id="results">
+      <div class="result-panel">
+        <h2>📊 Document Info</h2>
+        <div class="meta-info" id="metaInfo"></div>
+
+        <h2 style="margin-top: 1.5rem;">📝 Extracted Content</h2>
+        <div class="tabs">
+          <button class="tab active" data-tab="formatted">Formatted</button>
+          <button class="tab" data-tab="blocks">Blocks</button>
+          <button class="tab" data-tab="raw">Raw JSON</button>
+        </div>
+
+        <div id="formattedContent" class="result-content markdown"></div>
+        <div id="blocksContent" class="result-content hidden"></div>
+        <div id="rawContent" class="result-content hidden"></div>
+      </div>
+
+      <div class="result-panel">
+        <h2>🔍 Extract Structured Data</h2>
+        <p style="color: #a1a1aa; margin-bottom: 1rem; font-size: 0.9rem;">
+          Extract specific fields using pre-defined schemas
+        </p>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+          <button class="tab" onclick="extractData('personal-info')">Personal Info</button>
+          <button class="tab" onclick="extractData('financial-info')">Financial</button>
+          <button class="tab" onclick="extractData('employment-info')">Employment</button>
+          <button class="tab" onclick="extractData('claim-info')">Claim Info</button>
+          <button class="tab" onclick="extractData('identity')">Identity Doc</button>
+        </div>
+
+        <div class="status hidden" id="extractStatus">
+          <div class="spinner"></div>
+          <span>Extracting...</span>
+        </div>
+
+        <div id="extractResult" class="result-content" style="min-height: 200px;">
+          <span style="color: #71717a;">Select a schema above to extract structured data</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3001';
+
+    let selectedFile = null;
+    let uploadedFileUrl = null;
+
+    // Elements
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const parseBtn = document.getElementById('parseBtn');
+    const status = document.getElementById('status');
+    const statusText = document.getElementById('statusText');
+    const results = document.getElementById('results');
+    const metaInfo = document.getElementById('metaInfo');
+    const formattedContent = document.getElementById('formattedContent');
+    const blocksContent = document.getElementById('blocksContent');
+    const rawContent = document.getElementById('rawContent');
+    const extractStatus = document.getElementById('extractStatus');
+    const extractResult = document.getElementById('extractResult');
+
+    // File upload handling
+    uploadZone.addEventListener('click', () => fileInput.click());
+
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        handleFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    function handleFile(file) {
+      selectedFile = file;
+      fileName.textContent = file.name;
+      fileSize.textContent = formatBytes(file.size);
+      fileInfo.classList.add('visible');
+      parseBtn.disabled = false;
+    }
+
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Parse document
+    parseBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      parseBtn.disabled = true;
+      status.className = 'status loading';
+      status.classList.remove('hidden');
+      statusText.textContent = 'Uploading and parsing document...';
+      results.classList.add('hidden');
+
+      try {
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        const response = await fetch(`${API_URL}/api/documents/parse-file`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.message || data.error || 'Parse failed');
+        }
+
+        // Store the file URL for extraction
+        uploadedFileUrl = data.data.file?.fileId ? `reducto://${data.data.file.fileId}` : null;
+
+        // Show success
+        status.className = 'status success';
+        statusText.textContent = `Parsed in ${data.data.duration.toFixed(2)}s`;
+
+        // Display results
+        displayResults(data.data);
+        results.classList.remove('hidden');
+
+      } catch (error) {
+        status.className = 'status error';
+        statusText.textContent = `Error: ${error.message}`;
+      }
+
+      parseBtn.disabled = false;
+    });
+
+    function displayResults(data) {
+      // Meta info
+      metaInfo.innerHTML = `
+        <div class="meta-card">
+          <div class="value">${data.usage?.num_pages || 1}</div>
+          <div class="label">Pages</div>
+        </div>
+        <div class="meta-card">
+          <div class="value">${data.duration?.toFixed(2) || '0'}s</div>
+          <div class="label">Duration</div>
+        </div>
+        <div class="meta-card">
+          <div class="value">${data.result?.chunks?.[0]?.blocks?.length || 0}</div>
+          <div class="label">Blocks</div>
+        </div>
+        ${data.studioLink ? `
+        <div class="meta-card">
+          <a href="${data.studioLink}" target="_blank" style="color: #60a5fa;">View in Studio →</a>
+          <div class="label">Reducto Studio</div>
+        </div>
+        ` : ''}
+      `;
+
+      // Formatted content
+      const chunks = data.result?.chunks || [];
+      let formattedHtml = '';
+      chunks.forEach(chunk => {
+        // Convert markdown to basic HTML
+        let content = chunk.content || '';
+        content = content.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        content = content.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        content = content.replace(/\n\n/g, '</p><p>');
+        formattedHtml += `<p>${content}</p>`;
+      });
+      formattedContent.innerHTML = formattedHtml || '<span style="color: #71717a;">No content extracted</span>';
+
+      // Blocks content
+      let blocksHtml = '';
+      chunks.forEach(chunk => {
+        (chunk.blocks || []).forEach(block => {
+          blocksHtml += `
+            <div class="block-item">
+              <div class="block-type">${block.type}</div>
+              <div class="block-content">${escapeHtml(block.content?.toString() || '')}</div>
+              <div class="confidence">Confidence: ${block.confidence || 'N/A'}</div>
+            </div>
+          `;
+        });
+      });
+      blocksContent.innerHTML = blocksHtml || '<span style="color: #71717a;">No blocks found</span>';
+
+      // Raw JSON
+      rawContent.textContent = JSON.stringify(data, null, 2);
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Tab switching
+    document.querySelectorAll('.tabs .tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        if (e.target.dataset.tab) {
+          // Update active tab
+          e.target.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+          e.target.classList.add('active');
+
+          // Show corresponding content
+          const tabName = e.target.dataset.tab;
+          formattedContent.classList.toggle('hidden', tabName !== 'formatted');
+          blocksContent.classList.toggle('hidden', tabName !== 'blocks');
+          rawContent.classList.toggle('hidden', tabName !== 'raw');
+        }
+      });
+    });
+
+    // Extract structured data
+    async function extractData(schemaType) {
+      if (!selectedFile) {
+        extractResult.innerHTML = '<span style="color: #ef4444;">Please upload a document first</span>';
+        return;
+      }
+
+      extractStatus.classList.remove('hidden');
+      extractResult.innerHTML = '';
+
+      try {
+        // Get the schema first
+        const schemasRes = await fetch(`${API_URL}/api/documents/schemas`);
+        const schemasData = await schemasRes.json();
+
+        // Map schema type to key
+        let schemaKey;
+        if (schemaType === 'personal-info') schemaKey = 'personalInfo';
+        else if (schemaType === 'financial-info') schemaKey = 'financialInfo';
+        else if (schemaType === 'employment-info') schemaKey = 'employmentInfo';
+        else if (schemaType === 'claim-info') schemaKey = 'claimInfo';
+        else if (schemaType === 'identity') schemaKey = 'identityDocument';
+
+        const schema = schemasData.data[schemaKey]?.schema;
+
+        if (!schema) {
+          throw new Error('Schema not found');
+        }
+
+        // Upload and extract
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        formData.append('schema', JSON.stringify(schema));
+
+        const response = await fetch(`${API_URL}/api/documents/extract-file`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.message || data.error || 'Extraction failed');
+        }
+
+        extractResult.innerHTML = `<pre>${JSON.stringify(data.data.result, null, 2)}</pre>`;
+
+      } catch (error) {
+        extractResult.innerHTML = `<span style="color: #ef4444;">Error: ${error.message}</span>`;
+      }
+
+      extractStatus.classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
