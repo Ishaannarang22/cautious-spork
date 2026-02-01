@@ -138,20 +138,20 @@ export const mockDrafts: DraftItem[] = [
 export const userDiscoverySteps = [
   { message: 'Initializing Firecrawl...', delay: 500 },
   { message: 'Searching social media platforms...', delay: 1200 },
-  { message: 'Found LinkedIn profile', delay: 800, type: 'social' as const },
-  { message: 'Found Twitter account', delay: 600, type: 'social' as const },
-  { message: 'Found GitHub profile', delay: 500, type: 'social' as const },
+  { message: 'Found LinkedIn profile', delay: 800, type: 'social' as const, category: 'socialProfiles' as const, itemId: 'linkedin' },
+  { message: 'Found Twitter account', delay: 600, type: 'social' as const, category: 'socialProfiles' as const, itemId: 'twitter' },
+  { message: 'Found GitHub profile', delay: 500, type: 'social' as const, category: 'socialProfiles' as const, itemId: 'github' },
   { message: 'Scanning data breach databases...', delay: 1000 },
-  { message: 'Alert: Found in LinkedIn 2021 breach', delay: 700, type: 'breach' as const },
-  { message: 'Alert: Found in Adobe 2019 breach', delay: 600, type: 'breach' as const },
-  { message: 'Alert: Found in Equifax 2017 breach', delay: 800, type: 'breach' as const },
-  { message: 'Alert: Found in Yahoo 2016 breach', delay: 500, type: 'breach' as const },
+  { message: 'Alert: Found in LinkedIn 2021 breach', delay: 700, type: 'breach' as const, category: 'dataBreaches' as const, itemId: 'breach-linkedin' },
+  { message: 'Alert: Found in Adobe 2019 breach', delay: 600, type: 'breach' as const, category: 'dataBreaches' as const, itemId: 'breach-adobe' },
+  { message: 'Alert: Found in Equifax 2017 breach', delay: 800, type: 'breach' as const, category: 'dataBreaches' as const, itemId: 'breach-equifax' },
+  { message: 'Alert: Found in Yahoo 2016 breach', delay: 500, type: 'breach' as const, category: 'dataBreaches' as const, itemId: 'breach-yahoo' },
   { message: 'Checking public records...', delay: 900 },
-  { message: 'Found property records', delay: 600, type: 'record' as const },
-  { message: 'Found voter registration', delay: 400, type: 'record' as const },
+  { message: 'Found property records', delay: 600, type: 'record' as const, category: 'publicRecords' as const, itemId: 'record-property' },
+  { message: 'Found voter registration', delay: 400, type: 'record' as const, category: 'publicRecords' as const, itemId: 'record-voter' },
   { message: 'Analyzing online presence...', delay: 800 },
-  { message: 'Found company website listing', delay: 500, type: 'presence' as const },
-  { message: 'Found Medium articles', delay: 400, type: 'presence' as const },
+  { message: 'Found company website listing', delay: 500, type: 'presence' as const, category: 'onlinePresence' as const, itemId: 'presence-company' },
+  { message: 'Found Medium articles', delay: 400, type: 'presence' as const, category: 'onlinePresence' as const, itemId: 'presence-medium' },
   { message: 'Discovery complete', delay: 500 },
 ];
 
@@ -186,3 +186,83 @@ export const redactoSteps = [
   { message: 'Preparing claim forms...', delay: 700 },
   { message: 'Analysis complete - 6 drafts ready', delay: 500 },
 ];
+
+// Graph flow structure: Individual Source → Data Item → Claim Document → Claim Source
+export interface GraphFlowData {
+  individualSources: {
+    id: string;
+    name: string;
+    type: 'social' | 'breach' | 'record' | 'presence' | 'broker';
+    dataItems: string[]; // IDs of data items from this source
+  }[];
+  dataItems: {
+    id: string;
+    type: string; // Email, Phone, SSN, Address, etc.
+    sources: string[]; // IDs of individual sources
+    documents: string[]; // IDs of claim documents
+  }[];
+  claimDocuments: {
+    id: string;
+    title: string;
+    type: string;
+    claimSource: string; // ID of claim source category
+    dataItems: string[]; // IDs of data items this document addresses
+  }[];
+  claimSources: {
+    id: string;
+    name: string;
+    risk: 'high' | 'medium' | 'low';
+    documents: string[]; // IDs of claim documents
+  }[];
+}
+
+export const graphFlowData: GraphFlowData = {
+  individualSources: [
+    { id: 'linkedin', name: 'LinkedIn', type: 'social', dataItems: ['email', 'phone', 'employment'] },
+    { id: 'twitter', name: 'Twitter', type: 'social', dataItems: ['email', 'username'] },
+    { id: 'github', name: 'GitHub', type: 'social', dataItems: ['email', 'username'] },
+    { id: 'breach-linkedin', name: 'LinkedIn 2021 Breach', type: 'breach', dataItems: ['email', 'phone', 'employment'] },
+    { id: 'breach-adobe', name: 'Adobe 2019 Breach', type: 'breach', dataItems: ['email', 'password', 'username'] },
+    { id: 'breach-equifax', name: 'Equifax 2017 Breach', type: 'breach', dataItems: ['ssn', 'dob', 'address', 'credit'] },
+    { id: 'breach-yahoo', name: 'Yahoo 2016 Breach', type: 'breach', dataItems: ['email', 'password'] },
+    { id: 'spokeo', name: 'Spokeo', type: 'broker', dataItems: ['address', 'phone', 'relatives'] },
+    { id: 'whitepages', name: 'WhitePages', type: 'broker', dataItems: ['phone', 'address'] },
+    { id: 'beenverified', name: 'BeenVerified', type: 'broker', dataItems: ['records', 'background'] },
+    { id: 'record-property', name: 'Property Records', type: 'record', dataItems: ['address', 'ownership'] },
+    { id: 'record-voter', name: 'Voter Registration', type: 'record', dataItems: ['address', 'party'] },
+    { id: 'presence-medium', name: 'Medium', type: 'presence', dataItems: ['articles', 'profile'] },
+  ],
+  dataItems: [
+    { id: 'email', type: 'Email Address', sources: ['linkedin', 'twitter', 'github', 'breach-linkedin', 'breach-adobe', 'breach-yahoo'], documents: ['doc-ccpa', 'doc-marketing'] },
+    { id: 'phone', type: 'Phone Number', sources: ['linkedin', 'breach-linkedin', 'spokeo', 'whitepages'], documents: ['doc-spokeo', 'doc-whitepages', 'doc-telemarketing'] },
+    { id: 'employment', type: 'Employment History', sources: ['linkedin', 'breach-linkedin'], documents: ['doc-spokeo'] },
+    { id: 'username', type: 'Username', sources: ['twitter', 'github', 'breach-adobe'], documents: [] },
+    { id: 'password', type: 'Password Hash', sources: ['breach-adobe', 'breach-yahoo'], documents: [] },
+    { id: 'ssn', type: 'Social Security Number', sources: ['breach-equifax'], documents: ['doc-equifax'] },
+    { id: 'dob', type: 'Date of Birth', sources: ['breach-equifax'], documents: ['doc-equifax'] },
+    { id: 'address', type: 'Address History', sources: ['breach-equifax', 'spokeo', 'whitepages', 'record-property', 'record-voter'], documents: ['doc-spokeo', 'doc-whitepages', 'doc-equifax'] },
+    { id: 'credit', type: 'Credit Score', sources: ['breach-equifax'], documents: ['doc-equifax'] },
+    { id: 'relatives', type: 'Relatives Info', sources: ['spokeo'], documents: ['doc-spokeo'] },
+    { id: 'records', type: 'Public Records', sources: ['beenverified'], documents: ['doc-beenverified'] },
+    { id: 'background', type: 'Background Check', sources: ['beenverified'], documents: ['doc-beenverified'] },
+    { id: 'ownership', type: 'Property Ownership', sources: ['record-property'], documents: [] },
+    { id: 'party', type: 'Political Affiliation', sources: ['record-voter'], documents: [] },
+    { id: 'articles', type: 'Published Articles', sources: ['presence-medium'], documents: [] },
+    { id: 'profile', type: 'Public Profile', sources: ['presence-medium'], documents: [] },
+  ],
+  claimDocuments: [
+    { id: 'doc-spokeo', title: 'Spokeo Opt-Out Request', type: 'Data Broker Removal', claimSource: 'data-brokers', dataItems: ['phone', 'address', 'employment', 'relatives'] },
+    { id: 'doc-whitepages', title: 'WhitePages Removal', type: 'Data Broker Removal', claimSource: 'data-brokers', dataItems: ['phone', 'address'] },
+    { id: 'doc-beenverified', title: 'BeenVerified Opt-Out', type: 'Data Broker Removal', claimSource: 'data-brokers', dataItems: ['records', 'background'] },
+    { id: 'doc-equifax', title: 'Equifax Settlement Claim', type: 'Legal Claim', claimSource: 'breaches', dataItems: ['ssn', 'dob', 'address', 'credit'] },
+    { id: 'doc-ccpa', title: 'CCPA Data Deletion', type: 'Privacy Request', claimSource: 'privacy', dataItems: ['email', 'phone', 'address'] },
+    { id: 'doc-telemarketing', title: 'Telemarketing Opt-Out', type: 'Do Not Call', claimSource: 'marketing', dataItems: ['phone'] },
+    { id: 'doc-marketing', title: 'Email Marketing Opt-Out', type: 'Unsubscribe', claimSource: 'marketing', dataItems: ['email'] },
+  ],
+  claimSources: [
+    { id: 'data-brokers', name: 'Data Broker Listings', risk: 'high', documents: ['doc-spokeo', 'doc-whitepages', 'doc-beenverified'] },
+    { id: 'breaches', name: 'Breach Notifications', risk: 'high', documents: ['doc-equifax'] },
+    { id: 'privacy', name: 'Privacy Violations', risk: 'high', documents: ['doc-ccpa'] },
+    { id: 'marketing', name: 'Marketing Lists', risk: 'medium', documents: ['doc-telemarketing', 'doc-marketing'] },
+  ],
+};

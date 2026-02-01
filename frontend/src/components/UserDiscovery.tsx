@@ -3,12 +3,14 @@ import { motion } from 'framer-motion';
 import { Scale, ArrowRight, User, AlertTriangle, Globe, Database } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { mockUserData, userDiscoverySteps } from '@/data/mockData';
+import DiscoveryGraph from './DiscoveryGraph';
 
 const UserDiscovery: React.FC = () => {
   const { userInfo, setAppState, setDiscoveredUserData } = useApp();
   const [logs, setLogs] = useState<{ message: string; type?: string }[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [discoveredItems, setDiscoveredItems] = useState<Set<string>>(new Set());
   const logEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -21,6 +23,12 @@ const UserDiscovery: React.FC = () => {
     const step = userDiscoverySteps[currentStep];
     const timer = setTimeout(() => {
       setLogs(prev => [...prev, { message: step.message, type: step.type }]);
+
+      // Trigger graph animation if this step has an itemId
+      if (step.itemId) {
+        setDiscoveredItems(prev => new Set([...prev, step.itemId!]));
+      }
+
       setCurrentStep(prev => prev + 1);
     }, step.delay);
 
@@ -60,10 +68,10 @@ const UserDiscovery: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="border-b border-border">
-        <div className="max-w-4xl mx-auto px-6 py-4">
+      <header className="border-b border-border flex-shrink-0">
+        <div className="max-w-full mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Scale className="w-5 h-5" />
@@ -75,24 +83,26 @@ const UserDiscovery: React.FC = () => {
       </header>
 
       {/* Main */}
-      <main className="max-w-4xl mx-auto px-6 py-12">
-        <div className="mb-8">
+      <main className="flex-1 overflow-hidden flex flex-col max-w-[95vw] mx-auto px-6 py-6 w-full">
+        <div className="mb-6 flex-shrink-0">
           <h1 className="text-3xl font-medium mb-2">Researching your data</h1>
           <p className="text-muted-foreground">
             Scanning for information about <span className="text-foreground font-medium">{userInfo?.name}</span>
           </p>
         </div>
 
-        {/* Terminal-style log output */}
-        <div className="terminal">
-          <div className="terminal-header">
+        <div className="flex gap-6 flex-1 min-h-0">
+          {/* Terminal-style log output - 20% width */}
+          <div className="w-[20%] flex-shrink-0 flex flex-col">
+            <div className="terminal flex-1 flex flex-col">
+          <div className="terminal-header flex-shrink-0">
             <div className="terminal-dot bg-red-500" />
             <div className="terminal-dot bg-yellow-500" />
             <div className="terminal-dot bg-green-500" />
             <span className="ml-3 text-xs text-neutral-500 font-mono">firecrawl --user-discovery</span>
           </div>
 
-          <div className="p-4 h-80 overflow-y-auto font-mono text-sm scrollbar-thin">
+          <div className="p-4 flex-1 overflow-y-auto font-mono text-sm scrollbar-thin">
             {logs.map((log, i) => (
               <motion.div
                 key={i}
@@ -114,9 +124,19 @@ const UserDiscovery: React.FC = () => {
             <div ref={logEndRef} />
           </div>
         </div>
+          </div>
+
+          {/* Discovery Graph - 80% width */}
+          <div className="flex-1 min-w-0">
+            <DiscoveryGraph
+              discoveredItems={discoveredItems}
+              userName={userInfo?.name || 'User'}
+            />
+          </div>
+        </div>
 
         {/* Results Summary */}
-        {isComplete && (
+        {isComplete && !true && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
