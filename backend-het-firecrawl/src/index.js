@@ -410,6 +410,24 @@ app.post('/api/get-companies', async (req, res) => {
       profile = mergeNyneData(profile, nyneData);
     }
 
+    // Determine which input helped find the person
+    const matchedVia = [];
+    if (email && profile.email?.toLowerCase() === email.toLowerCase()) {
+      matchedVia.push('email');
+    }
+    if (phone && profile.phone === phone) {
+      matchedVia.push('phone');
+    }
+    if (linkedinUrl && profile.socialProfiles?.linkedin?.toLowerCase().includes(linkedinUrl.toLowerCase().split('/in/')[1]?.split('/')[0] || '')) {
+      matchedVia.push('linkedin');
+    }
+    // If none matched but we got data, it was found via the inputs provided
+    if (matchedVia.length === 0 && profile.name) {
+      if (email) matchedVia.push('email');
+      if (phone) matchedVia.push('phone');
+      if (linkedinUrl) matchedVia.push('linkedin');
+    }
+
     // Extract all companies
     const companies = [
       profile.currentCompany,
@@ -425,9 +443,17 @@ app.post('/api/get-companies', async (req, res) => {
       person: {
         name: profile.name,
         email: profile.email,
+        phone: profile.phone || null,
         location: profile.location,
         state: profile.location?.split(',')[1]?.trim() || null,
-        headline: profile.headline
+        headline: profile.headline,
+        matchedVia: matchedVia,
+        inputsProvided: {
+          email: email || null,
+          phone: phone || null,
+          linkedinUrl: linkedinUrl || null,
+          name: name || null
+        }
       },
       companies: uniqueCompanies,
       workHistory: profile.workHistory,
@@ -553,10 +579,17 @@ async function enrichWithNyne({ email, linkedinUrl, phone, name }, sendEvent) {
     'X-API-Secret': NYNE_API_SECRET
   };
 
+  // Send ALL identifiers together for better matching
   const body = {};
   if (email) body.email = email;
   if (linkedinUrl) body.social_media_url = linkedinUrl;
   if (phone) body.phone = phone;
+
+  // Enable AI-enhanced search for harder to find people
+  body.ai_enhanced_search = true;
+
+  // Get social media posts/activity
+  body.newsfeed = ['linkedin', 'twitter'];
 
   console.log('Nyne request:', { url: `${NYNE_BASE_URL}/person/enrichment`, body });
 
@@ -589,9 +622,9 @@ async function enrichWithNyne({ email, linkedinUrl, phone, name }, sendEvent) {
     sendEvent('nyne_polling', { message: `Polling for results (request_id: ${requestId.slice(0, 20)}...)` });
   }
 
-  // Poll with backoff
-  const maxAttempts = 30;
-  const pollInterval = 2000; // 2 seconds
+  // Poll with backoff - increased timeout for harder to find people
+  const maxAttempts = 60; // 60 attempts
+  const pollInterval = 3000; // 3 seconds = 3 minutes max
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await sleep(pollInterval);
