@@ -105,7 +105,39 @@ app.get('/api/discover-claims/stream', async (req, res) => {
       sendEvent('nyne_skipped', { message: 'Nyne AI not configured - using provided data only' });
     }
 
-    // Step 2: Firecrawl - Real-time scraping with WebSocket watcher
+    // Step 2: Get person interests (brand affinities)
+    if (NYNE_API_KEY && NYNE_API_SECRET) {
+      try {
+        const interests = await getPersonInterests({ email, linkedinUrl, phone }, sendEvent);
+        if (interests) {
+          profile.brandAffinities = interests.brand_affinities || [];
+          profile.psychographics = interests.psychographics || {};
+          profile.interestGraph = interests.interest_graph || {};
+          profile.professionalEcosystem = interests.professional_ecosystem || {};
+
+          // Extract company names from brand affinities
+          if (interests.brand_affinities) {
+            const brandCompanies = [];
+            for (const category of Object.values(interests.brand_affinities)) {
+              if (Array.isArray(category)) {
+                brandCompanies.push(...category.map(b => b.name || b));
+              }
+            }
+            profile.mentionedCompanies = [...(profile.mentionedCompanies || []), ...brandCompanies];
+          }
+
+          sendEvent('nyne_interests_complete', {
+            message: 'Person interests retrieved',
+            brandAffinities: interests.brand_affinities,
+            companiesFound: profile.mentionedCompanies.length
+          });
+        }
+      } catch (err) {
+        sendEvent('nyne_interests_error', { message: `Interests error: ${err.message}` });
+      }
+    }
+
+    // Step 3: Firecrawl - Real-time scraping with WebSocket watcher
     if (process.env.FIRECRAWL_API_KEY) {
       sendEvent('step', { step: 'firecrawl_start', message: 'Starting Firecrawl data collection...' });
 
@@ -140,12 +172,12 @@ app.get('/api/discover-claims/stream', async (req, res) => {
       sendEvent('firecrawl_skipped', { message: 'Firecrawl not configured' });
     }
 
-    // Step 3: Analyze profile
+    // Step 4: Analyze profile
     sendEvent('step', { step: 'analysis_start', message: 'Analyzing profile for eligible claims...' });
     profile.insights = analyzeProfile(profile);
     sendEvent('analysis_complete', { message: 'Profile analysis complete', insights: profile.insights });
 
-    // Step 4: Match claims
+    // Step 5: Match claims
     sendEvent('step', { step: 'matching_start', message: 'Matching eligible claims...' });
     const claims = autoMatchClaims(profile);
 
@@ -360,6 +392,64 @@ app.post('/api/enrich', async (req, res) => {
 });
 
 // ============================================================
+// FOR FIRECRAWL TEAMMATE - Get companies to search
+// ============================================================
+app.post('/api/get-companies', async (req, res) => {
+  const { email, linkedinUrl, phone, name } = req.body;
+
+  if (!email && !linkedinUrl && !phone && !name) {
+    return res.status(400).json({ error: 'At least one identifier required' });
+  }
+
+  try {
+    // Get person enrichment from Nyne
+    const nyneData = await enrichWithNyne({ email, linkedinUrl, phone, name }, null);
+
+    let profile = createEmptyProfile(email, linkedinUrl, phone);
+    if (nyneData) {
+      profile = mergeNyneData(profile, nyneData);
+    }
+
+    // Extract all companies
+    const companies = [
+      profile.currentCompany,
+      ...profile.workHistory.map(w => w.company)
+    ].filter(Boolean);
+
+    // Remove duplicates
+    const uniqueCompanies = [...new Set(companies)];
+
+    // Return clean data for Firecrawl teammate
+    res.json({
+      success: true,
+      person: {
+        name: profile.name,
+        email: profile.email,
+        location: profile.location,
+        state: profile.location?.split(',')[1]?.trim() || null,
+        headline: profile.headline
+      },
+      companies: uniqueCompanies,
+      workHistory: profile.workHistory,
+      skills: profile.skills,
+      socialProfiles: profile.socialProfiles,
+      // What Firecrawl should search for:
+      searchSuggestions: {
+        settlementSites: [
+          'https://topclassactions.com',
+          'https://classaction.org/settlements',
+          'https://www.consumerfinance.gov'
+        ],
+        searchQueries: uniqueCompanies.map(c => `${c} class action settlement`),
+        unclaimedProperty: profile.location ? `unclaimed property ${profile.location.split(',')[1]?.trim() || ''}` : null
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================
 // HELPER FUNCTIONS
 // ============================================================
 
@@ -384,6 +474,76 @@ function createEmptyProfile(email, linkedinUrl, phone) {
     enrichmentSources: [],
     enrichedAt: new Date().toISOString()
   };
+}
+
+// Get person interests (brand affinities, companies they follow)
+async function getPersonInterests({ email, linkedinUrl, phone }, sendEvent) {
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-API-Key': NYNE_API_KEY,
+    'X-API-Secret': NYNE_API_SECRET
+  };
+
+  const body = {};
+  if (email) body.email = email;
+  if (linkedinUrl) body.social_media_url = linkedinUrl;
+  if (phone) body.phone = phone;
+
+  try {
+    if (sendEvent) sendEvent('nyne_interests_start', { message: 'Fetching person interests & brand affinities...' });
+
+    const response = await fetch(`${NYNE_BASE_URL}/person/interests`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body)
+    });
+
+    const result = await response.json();
+    console.log('Nyne interests submit:', JSON.stringify(result, null, 2));
+
+    if (!result.success) {
+      if (sendEvent) sendEvent('nyne_interests_error', { message: `Interests API failed: ${result.error?.message || 'Unknown error'}` });
+      return null;
+    }
+
+    if (!result.data?.request_id) {
+      if (sendEvent) sendEvent('nyne_interests_error', { message: 'No request_id returned from interests API' });
+      return null;
+    }
+
+    // Poll for results
+    const requestId = result.data.request_id;
+    const maxAttempts = 30;
+    const pollInterval = 2000;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      await sleep(pollInterval);
+
+      const pollResponse = await fetch(`${NYNE_BASE_URL}/person/interests?request_id=${requestId}`, {
+        method: 'GET',
+        headers: {
+          'X-API-Key': NYNE_API_KEY,
+          'X-API-Secret': NYNE_API_SECRET
+        }
+      });
+
+      const pollResult = await pollResponse.json();
+      console.log(`Nyne interests poll ${attempt + 1}:`, pollResult.data?.status);
+
+      if (pollResult.data?.status === 'completed') {
+        console.log('Nyne INTERESTS RESPONSE:', JSON.stringify(pollResult, null, 2));
+        return pollResult.data?.result || pollResult.data;
+      }
+
+      if (pollResult.data?.status === 'failed') {
+        return null;
+      }
+    }
+    return null;
+  } catch (err) {
+    console.error('Nyne interests error:', err);
+    return null;
+  }
 }
 
 async function enrichWithNyne({ email, linkedinUrl, phone, name }, sendEvent) {
@@ -586,14 +746,40 @@ function analyzeProfile(profile) {
     'Capital One': { year: '2019', affected: '100 million', payout: '$25-75' },
     'Yahoo': { year: '2013-2016', affected: '3 billion', payout: '$100-350' },
     'Facebook': { year: '2018-2019', affected: '533 million', payout: '$50-200' },
-    'Meta': { year: '2018-2019', affected: '533 million', payout: '$50-200' }
+    'Meta': { year: '2018-2019', affected: '533 million', payout: '$50-200' },
+    'LinkedIn': { year: '2021', affected: '700 million', payout: '$50-150' },
+    'Twitter': { year: '2022', affected: '200 million', payout: '$25-100' },
+    'X': { year: '2022', affected: '200 million', payout: '$25-100' },
+    'Apple': { year: '2023', affected: 'iOS users', payout: '$25-75' },
+    'Google': { year: '2023', affected: 'Privacy violations', payout: '$50-100' },
+    'Amazon': { year: '2023', affected: 'Ring/Alexa users', payout: '$25-50' },
+    'Uber': { year: '2022', affected: '57 million', payout: '$50-100' },
+    'Marriott': { year: '2018', affected: '500 million', payout: '$25-75' },
+    'Home Depot': { year: '2014', affected: '56 million', payout: '$25-50' },
+    'Target': { year: '2013', affected: '110 million', payout: '$25-50' },
+    'AT&T': { year: '2024', affected: '73 million', payout: '$50-150' },
+    'Verizon': { year: '2022', affected: 'Prepaid customers', payout: '$25-75' },
+    'Tesla': { year: '2023', affected: 'Employee data', payout: '$25-50' }
   };
 
+  // Collect all companies from work history, mentions, and brand affinities
   const allCompanies = [
     profile.currentCompany,
     ...profile.workHistory.map(w => w.company),
-    ...profile.mentionedCompanies
+    ...(profile.mentionedCompanies || [])
   ].filter(Boolean);
+
+  // Also extract brands from brand affinities
+  if (profile.brandAffinities) {
+    for (const [category, brands] of Object.entries(profile.brandAffinities)) {
+      if (Array.isArray(brands)) {
+        for (const brand of brands) {
+          const brandName = typeof brand === 'string' ? brand : brand.name;
+          if (brandName) allCompanies.push(brandName);
+        }
+      }
+    }
+  }
 
   for (const company of allCompanies) {
     for (const [breachedName, info] of Object.entries(breachedCompanies)) {
