@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Scale, ArrowRight, User, AlertTriangle, Globe, Database } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
+import { Scale, ArrowRight, User, AlertTriangle, Globe, Database, Wifi, WifiOff } from 'lucide-react';
+import { useApp, DiscoveredUserData } from '@/context/AppContext';
 import { mockUserData, userDiscoverySteps } from '@/data/mockData';
 import DiscoveryGraph from './DiscoveryGraph';
+import api from '@/services/api';
 
 const UserDiscovery: React.FC = () => {
   const { userInfo, setAppState, setDiscoveredUserData } = useApp();
@@ -11,20 +12,114 @@ const UserDiscovery: React.FC = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const [discoveredItems, setDiscoveredItems] = useState<Set<string>>(new Set());
+  const [apiData, setApiData] = useState<DiscoveredUserData | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isApiLoading, setIsApiLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const hasFetchedRef = useRef(false);
 
+  // Fetch data from API on mount
   useEffect(() => {
-    if (currentStep >= userDiscoverySteps.length) {
+    if (hasFetchedRef.current || !userInfo?.name) return;
+    hasFetchedRef.current = true;
+
+    const fetchData = async () => {
+      try {
+        setLogs(prev => [...prev, { message: 'Connecting to LitiGate API...', type: undefined }]);
+        const data = await api.discoverUser(userInfo.name, userInfo.email);
+        setApiData(data);
+        setLogs(prev => [...prev, { message: 'API connected - starting discovery...', type: undefined }]);
+      } catch (error) {
+        console.error('API error:', error);
+        setApiError(error instanceof Error ? error.message : 'Failed to connect to API');
+        setLogs(prev => [...prev, { message: 'API unavailable - using cached data...', type: undefined }]);
+        setApiData(mockUserData);
+      } finally {
+        setIsApiLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [userInfo]);
+
+  // Generate streaming steps based on API data
+  const generateStepsFromData = useCallback((data: DiscoveredUserData): typeof userDiscoverySteps => {
+    const steps: typeof userDiscoverySteps = [
+      { message: 'Initializing Firecrawl...', delay: 500 },
+      { message: 'Searching social media platforms...', delay: 800 },
+    ];
+
+    // Add social profiles
+    data.socialProfiles.forEach((profile, i) => {
+      steps.push({
+        message: `Found ${profile.platform} profile`,
+        delay: 400 + i * 100,
+        type: 'social' as const,
+        category: 'socialProfiles' as const,
+        itemId: profile.platform.toLowerCase(),
+      });
+    });
+
+    steps.push({ message: 'Scanning data breach databases...', delay: 600 });
+
+    // Add data breaches
+    data.dataBreaches.forEach((breach, i) => {
+      steps.push({
+        message: `Alert: Found in ${breach.name}`,
+        delay: 400 + i * 100,
+        type: 'breach' as const,
+        category: 'dataBreaches' as const,
+        itemId: `breach-${breach.name.toLowerCase().replace(/\s+/g, '-')}`,
+      });
+    });
+
+    steps.push({ message: 'Checking public records...', delay: 600 });
+
+    // Add public records
+    data.publicRecords.forEach((record, i) => {
+      steps.push({
+        message: `Found ${record.type.toLowerCase()}`,
+        delay: 300 + i * 100,
+        type: 'record' as const,
+        category: 'publicRecords' as const,
+        itemId: `record-${record.type.toLowerCase().replace(/\s+/g, '-')}`,
+      });
+    });
+
+    steps.push({ message: 'Analyzing online presence...', delay: 600 });
+
+    // Add online presence
+    data.onlinePresence.forEach((presence, i) => {
+      steps.push({
+        message: `Found ${presence.site}`,
+        delay: 300 + i * 100,
+        type: 'presence' as const,
+        category: 'onlinePresence' as const,
+        itemId: `presence-${presence.site.toLowerCase().replace(/\s+/g, '-')}`,
+      });
+    });
+
+    steps.push({ message: 'Discovery complete', delay: 400 });
+
+    return steps;
+  }, []);
+
+  // Stream the logs based on fetched data
+  useEffect(() => {
+    if (isApiLoading || !apiData) return;
+
+    const steps = generateStepsFromData(apiData);
+
+    if (currentStep >= steps.length) {
       setIsComplete(true);
-      setDiscoveredUserData(mockUserData);
+      setDiscoveredUserData(apiData);
       return;
     }
 
-    const step = userDiscoverySteps[currentStep];
+    const step = steps[currentStep];
     const timer = setTimeout(() => {
       setLogs(prev => [...prev, { message: step.message, type: step.type }]);
 
-      // Trigger graph animation if this step has an itemId
       if (step.itemId) {
         setDiscoveredItems(prev => new Set([...prev, step.itemId!]));
       }
@@ -33,7 +128,7 @@ const UserDiscovery: React.FC = () => {
     }, step.delay);
 
     return () => clearTimeout(timer);
-  }, [currentStep, setDiscoveredUserData]);
+  }, [currentStep, isApiLoading, apiData, setDiscoveredUserData, generateStepsFromData]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -67,6 +162,8 @@ const UserDiscovery: React.FC = () => {
     }
   };
 
+  const displayData = apiData || mockUserData;
+
   return (
     <div className="h-screen bg-background flex flex-col">
       {/* Header */}
@@ -77,7 +174,20 @@ const UserDiscovery: React.FC = () => {
               <Scale className="w-5 h-5" />
               <span className="font-medium">LitiGate</span>
             </div>
-            <span className="step-indicator">Step 1 of 4</span>
+            <div className="flex items-center gap-4">
+              {apiError ? (
+                <span className="flex items-center gap-1 text-xs text-amber-600">
+                  <WifiOff className="w-3 h-3" />
+                  Offline mode
+                </span>
+              ) : !isApiLoading && (
+                <span className="flex items-center gap-1 text-xs text-emerald-600">
+                  <Wifi className="w-3 h-3" />
+                  Live data
+                </span>
+              )}
+              <span className="step-indicator">Step 1 of 4</span>
+            </div>
           </div>
         </div>
       </header>
@@ -136,54 +246,35 @@ const UserDiscovery: React.FC = () => {
         </div>
 
         {/* Results Summary */}
-        {isComplete && !true && (
+        {isComplete && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-8 space-y-6"
+            className="mt-6 flex-shrink-0"
           >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'Social Profiles', value: mockUserData.socialProfiles.length, color: 'text-sky-600' },
-                { label: 'Data Breaches', value: mockUserData.dataBreaches.length, color: 'text-red-600' },
-                { label: 'Public Records', value: mockUserData.publicRecords.length, color: 'text-emerald-600' },
-                { label: 'Online Presence', value: mockUserData.onlinePresence.length, color: 'text-purple-600' },
-              ].map((stat, i) => (
-                <div key={i} className="p-4 rounded-2xl bg-white border border-border">
-                  <div className={`text-3xl font-medium font-mono ${stat.color}`}>{stat.value}</div>
-                  <div className="text-sm text-muted-foreground mt-1">{stat.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Data Breaches Alert */}
-            {mockUserData.dataBreaches.length > 0 && (
-              <div className="p-5 rounded-2xl bg-red-50 border border-red-200">
-                <div className="flex items-center gap-2 text-red-600 font-medium mb-3">
-                  <AlertTriangle className="w-5 h-5" />
-                  Found in {mockUserData.dataBreaches.length} data breaches
-                </div>
-                <div className="space-y-2">
-                  {mockUserData.dataBreaches.map((breach, i) => (
-                    <div key={i} className="flex items-center justify-between text-sm">
-                      <span className="text-foreground font-medium">{breach.name}</span>
-                      <span className="text-muted-foreground">{breach.dataTypes.join(', ')}</span>
-                    </div>
-                  ))}
-                </div>
+            <div className="flex items-center justify-between">
+              <div className="flex gap-4">
+                {[
+                  { label: 'Profiles', value: displayData.socialProfiles.length, color: 'text-sky-600' },
+                  { label: 'Breaches', value: displayData.dataBreaches.length, color: 'text-red-600' },
+                  { label: 'Records', value: displayData.publicRecords.length, color: 'text-emerald-600' },
+                  { label: 'Presence', value: displayData.onlinePresence.length, color: 'text-purple-600' },
+                ].map((stat, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className={`text-xl font-medium font-mono ${stat.color}`}>{stat.value}</span>
+                    <span className="text-sm text-muted-foreground">{stat.label}</span>
+                  </div>
+                ))}
               </div>
-            )}
 
-            {/* Continue Button */}
-            <div className="flex justify-end">
               <motion.button
                 onClick={handleContinue}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className="px-8 py-3 rounded-full bg-foreground text-background font-medium flex items-center gap-2 hover:opacity-80 transition-opacity"
+                className="px-6 py-2 rounded-full bg-foreground text-background font-medium flex items-center gap-2 hover:opacity-80 transition-opacity"
               >
                 {userInfo?.company ? 'Continue to Company Scan' : 'Continue to Analysis'}
-                <ArrowRight className="w-5 h-5" />
+                <ArrowRight className="w-4 h-4" />
               </motion.button>
             </div>
           </motion.div>

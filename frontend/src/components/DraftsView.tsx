@@ -1,36 +1,72 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { Scale, X, Send, FileText, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Scale, X, Send, FileText, Check, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
+import { api } from '@/services/api';
 
 const DraftsView: React.FC = () => {
   const { drafts, setDrafts, userInfo, setAppState } = useApp();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState<'left' | 'right' | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const pendingDrafts = drafts.filter(d => d.status === 'pending');
   const sentCount = drafts.filter(d => d.status === 'sent').length;
   const skippedCount = drafts.filter(d => d.status === 'deleted').length;
   const currentDraft = pendingDrafts[0];
 
-  const handleSwipe = (swipeDirection: 'left' | 'right') => {
-    if (!currentDraft) return;
+  const handleSwipe = async (swipeDirection: 'left' | 'right') => {
+    if (!currentDraft || isSending) return;
 
-    setDirection(swipeDirection);
+    setSendError(null);
 
-    setTimeout(() => {
-      setDrafts(prev => prev.map(d =>
-        d.id === currentDraft.id
-          ? { ...d, status: swipeDirection === 'right' ? 'sent' : 'deleted' }
-          : d
-      ));
-      setDirection(null);
-      setIsExpanded(false);
-    }, 300);
+    if (swipeDirection === 'right') {
+      // Send the email via API
+      setIsSending(true);
+      try {
+        const recipientEmail = 'khamitov527@gmail.com';
+        await api.sendDraft(
+          currentDraft,
+          recipientEmail,
+          userInfo?.name || 'User',
+          userInfo?.email || 'user@example.com'
+        );
+
+        setDirection(swipeDirection);
+        setTimeout(() => {
+          setDrafts(drafts.map(d =>
+            d.id === currentDraft.id
+              ? { ...d, status: 'sent' as const }
+              : d
+          ));
+          setDirection(null);
+          setIsExpanded(false);
+          setIsSending(false);
+        }, 300);
+      } catch (error) {
+        console.error('Failed to send draft:', error);
+        setSendError(error instanceof Error ? error.message : 'Failed to send email');
+        setIsSending(false);
+      }
+    } else {
+      // Skip - no API call needed
+      setDirection(swipeDirection);
+      setTimeout(() => {
+        setDrafts(drafts.map(d =>
+          d.id === currentDraft.id
+            ? { ...d, status: 'deleted' as const }
+            : d
+        ));
+        setDirection(null);
+        setIsExpanded(false);
+      }, 300);
+    }
   };
 
   const handleDragEnd = (_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+    if (isSending) return;
     const threshold = 100;
     if (info.offset.x > threshold) {
       handleSwipe('right');
@@ -197,24 +233,37 @@ const DraftsView: React.FC = () => {
               </AnimatePresence>
             </div>
 
+            {/* Error Message */}
+            {sendError && (
+              <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm text-center max-w-md">
+                {sendError}
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="mt-8 flex items-center gap-6">
               <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: isSending ? 1 : 1.1 }}
+                whileTap={{ scale: isSending ? 1 : 0.95 }}
                 onClick={() => handleSwipe('left')}
-                className="w-16 h-16 rounded-full bg-white border-2 border-red-200 flex items-center justify-center text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors shadow-md"
+                disabled={isSending}
+                className="w-16 h-16 rounded-full bg-white border-2 border-red-200 flex items-center justify-center text-red-500 hover:bg-red-50 hover:border-red-300 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <X className="w-7 h-7" />
               </motion.button>
 
               <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: isSending ? 1 : 1.1 }}
+                whileTap={{ scale: isSending ? 1 : 0.95 }}
                 onClick={() => handleSwipe('right')}
-                className="w-20 h-20 rounded-full bg-foreground flex items-center justify-center text-background shadow-lg"
+                disabled={isSending}
+                className="w-20 h-20 rounded-full bg-foreground flex items-center justify-center text-background shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
               >
-                <Send className="w-8 h-8" />
+                {isSending ? (
+                  <Loader2 className="w-8 h-8 animate-spin" />
+                ) : (
+                  <Send className="w-8 h-8" />
+                )}
               </motion.button>
             </div>
           </>

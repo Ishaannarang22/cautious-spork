@@ -1,32 +1,104 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Scale, ArrowRight, Shield, AlertTriangle, FileText } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
+import { Scale, ArrowRight, Shield, AlertTriangle, FileText, Wifi, WifiOff } from 'lucide-react';
+import { useApp, RedactoResult, DraftItem } from '@/context/AppContext';
 import { mockRedactoResults, mockDrafts, redactoSteps } from '@/data/mockData';
+import api from '@/services/api';
 
 const RedactoProcessing: React.FC = () => {
-  const { setAppState, setRedactoResults, setDrafts } = useApp();
+  const { userInfo, discoveredUserData, discoveredCompanyData, setAppState, setRedactoResults, setDrafts } = useApp();
   const [logs, setLogs] = useState<{ message: string; type?: string; risk?: string }[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [apiResults, setApiResults] = useState<RedactoResult[] | null>(null);
+  const [apiDrafts, setApiDrafts] = useState<DraftItem[] | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isApiLoading, setIsApiLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const hasFetchedRef = useRef(false);
 
+  // Fetch data from API on mount
   useEffect(() => {
-    if (currentStep >= redactoSteps.length) {
+    if (hasFetchedRef.current || !discoveredUserData) return;
+    hasFetchedRef.current = true;
+
+    const fetchData = async () => {
+      try {
+        setLogs(prev => [...prev, { message: 'Connecting to analysis API...', type: undefined }]);
+        const response = await api.analyze(
+          discoveredUserData,
+          discoveredCompanyData || undefined,
+          userInfo?.name
+        );
+        setApiResults(response.redactoResults);
+        setApiDrafts(response.drafts);
+        setLogs(prev => [...prev, { message: 'Analysis engine connected...', type: undefined }]);
+      } catch (error) {
+        console.error('API error:', error);
+        setApiError(error instanceof Error ? error.message : 'Failed to connect to API');
+        setLogs(prev => [...prev, { message: 'API unavailable - using cached analysis...', type: undefined }]);
+        setApiResults(mockRedactoResults);
+        setApiDrafts(mockDrafts);
+      } finally {
+        setIsApiLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [discoveredUserData, discoveredCompanyData, userInfo?.name]);
+
+  // Generate streaming steps based on API data
+  const generateStepsFromResults = useCallback((results: RedactoResult[], drafts: DraftItem[]): typeof redactoSteps => {
+    const steps: typeof redactoSteps = [
+      { message: 'Connecting to Redacto API...', delay: 500 },
+      { message: 'Uploading discovered data...', delay: 600 },
+    ];
+
+    // Add findings from each category
+    results.forEach((result) => {
+      steps.push({ message: `Analyzing ${result.category.toLowerCase()}...`, delay: 700 });
+
+      result.findings.forEach((finding, i) => {
+        const riskLabel = finding.risk.toUpperCase();
+        steps.push({
+          message: `${finding.item.split(' - ')[0]} - ${riskLabel} RISK`,
+          delay: 300 + i * 50,
+          type: 'finding' as const,
+          risk: finding.risk as 'high' | 'medium' | 'low',
+        });
+      });
+    });
+
+    // Add document generation steps
+    steps.push({ message: 'Generating removal requests...', delay: 600 });
+    steps.push({ message: 'Drafting legal notices...', delay: 500 });
+    steps.push({ message: 'Preparing claim forms...', delay: 500 });
+    steps.push({ message: `Analysis complete - ${drafts.length} drafts ready`, delay: 400 });
+
+    return steps;
+  }, []);
+
+  // Stream the logs based on fetched data
+  useEffect(() => {
+    if (isApiLoading || !apiResults || !apiDrafts) return;
+
+    const steps = generateStepsFromResults(apiResults, apiDrafts);
+
+    if (currentStep >= steps.length) {
       setIsComplete(true);
-      setRedactoResults(mockRedactoResults);
-      setDrafts(mockDrafts);
+      setRedactoResults(apiResults);
+      setDrafts(apiDrafts);
       return;
     }
 
-    const step = redactoSteps[currentStep];
+    const step = steps[currentStep];
     const timer = setTimeout(() => {
       setLogs(prev => [...prev, { message: step.message, type: step.type, risk: step.risk }]);
       setCurrentStep(prev => prev + 1);
     }, step.delay);
 
     return () => clearTimeout(timer);
-  }, [currentStep, setRedactoResults, setDrafts]);
+  }, [currentStep, isApiLoading, apiResults, apiDrafts, setRedactoResults, setDrafts, generateStepsFromResults]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -45,8 +117,11 @@ const RedactoProcessing: React.FC = () => {
     }
   };
 
-  const totalFindings = mockRedactoResults.reduce((acc, r) => acc + r.findings.length, 0);
-  const highRiskCount = mockRedactoResults.reduce((acc, r) => acc + r.findings.filter(f => f.risk === 'high').length, 0);
+  const displayResults = apiResults || mockRedactoResults;
+  const displayDrafts = apiDrafts || mockDrafts;
+
+  const totalFindings = displayResults.reduce((acc, r) => acc + r.findings.length, 0);
+  const highRiskCount = displayResults.reduce((acc, r) => acc + r.findings.filter(f => f.risk === 'high').length, 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,7 +133,20 @@ const RedactoProcessing: React.FC = () => {
               <Scale className="w-5 h-5" />
               <span className="font-medium">LitiGate</span>
             </div>
-            <span className="step-indicator">Step 3 of 4</span>
+            <div className="flex items-center gap-4">
+              {apiError ? (
+                <span className="flex items-center gap-1 text-xs text-amber-600">
+                  <WifiOff className="w-3 h-3" />
+                  Offline mode
+                </span>
+              ) : !isApiLoading && (
+                <span className="flex items-center gap-1 text-xs text-emerald-600">
+                  <Wifi className="w-3 h-3" />
+                  Live analysis
+                </span>
+              )}
+              <span className="step-indicator">Step 3 of 4</span>
+            </div>
           </div>
         </div>
       </header>
@@ -122,14 +210,14 @@ const RedactoProcessing: React.FC = () => {
                 <div className="text-sm text-muted-foreground mt-1">High Priority</div>
               </div>
               <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200">
-                <div className="text-3xl font-medium font-mono text-emerald-600">{mockDrafts.length}</div>
+                <div className="text-3xl font-medium font-mono text-emerald-600">{displayDrafts.length}</div>
                 <div className="text-sm text-muted-foreground mt-1">Documents Ready</div>
               </div>
             </div>
 
             {/* Categories */}
             <div className="space-y-4">
-              {mockRedactoResults.map((result, i) => (
+              {displayResults.map((result, i) => (
                 <div key={i} className="p-5 rounded-2xl bg-white border border-border">
                   <h3 className="font-medium mb-4 flex items-center gap-2">
                     <Shield className="w-4 h-4 text-foreground" />

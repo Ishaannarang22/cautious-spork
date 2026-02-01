@@ -1,31 +1,120 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Scale, ArrowRight, Building, Users, Newspaper, FileText } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
+import { Scale, ArrowRight, Building, Users, Newspaper, FileText, Wifi, WifiOff } from 'lucide-react';
+import { useApp, DiscoveredCompanyData } from '@/context/AppContext';
 import { mockCompanyData, companyDiscoverySteps } from '@/data/mockData';
+import api from '@/services/api';
 
 const CompanyDiscovery: React.FC = () => {
   const { userInfo, setAppState, setDiscoveredCompanyData } = useApp();
   const [logs, setLogs] = useState<{ message: string; type?: string }[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [apiData, setApiData] = useState<DiscoveredCompanyData | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isApiLoading, setIsApiLoading] = useState(true);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const hasFetchedRef = useRef(false);
 
+  // Fetch data from API on mount
   useEffect(() => {
-    if (currentStep >= companyDiscoverySteps.length) {
+    if (hasFetchedRef.current || !userInfo?.company) return;
+    hasFetchedRef.current = true;
+
+    const fetchData = async () => {
+      try {
+        setLogs(prev => [...prev, { message: 'Connecting to company API...', type: undefined }]);
+        const data = await api.discoverCompany(userInfo.company!, userInfo.name);
+        setApiData(data);
+        setLogs(prev => [...prev, { message: 'API connected - starting company analysis...', type: undefined }]);
+      } catch (error) {
+        console.error('API error:', error);
+        setApiError(error instanceof Error ? error.message : 'Failed to connect to API');
+        setLogs(prev => [...prev, { message: 'API unavailable - using cached data...', type: undefined }]);
+        setApiData(mockCompanyData);
+      } finally {
+        setIsApiLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [userInfo]);
+
+  // Generate streaming steps based on API data
+  const generateStepsFromData = useCallback((data: DiscoveredCompanyData): typeof companyDiscoverySteps => {
+    const steps: typeof companyDiscoverySteps = [
+      { message: 'Starting company analysis...', delay: 500 },
+      { message: 'Fetching company registration data...', delay: 800 },
+    ];
+
+    // Add company info
+    if (data.companyInfo.length > 0) {
+      const companyName = data.companyInfo.find(i => i.field.toLowerCase().includes('name'))?.value || 'Company';
+      steps.push({
+        message: `Found: ${companyName}`,
+        delay: 500,
+        type: 'info' as const,
+      });
+    }
+
+    steps.push({ message: 'Analyzing company structure...', delay: 600 });
+
+    // Add employees
+    if (data.employees.length > 0) {
+      steps.push({
+        message: `Found ${data.employees.length} key executives`,
+        delay: 500,
+        type: 'employee' as const,
+      });
+    }
+
+    steps.push({ message: 'Scanning news sources...', delay: 700 });
+
+    // Add news
+    if (data.newsArticles.length > 0) {
+      steps.push({
+        message: `Found ${data.newsArticles.length} recent articles`,
+        delay: 500,
+        type: 'news' as const,
+      });
+    }
+
+    steps.push({ message: 'Checking legal filings...', delay: 700 });
+
+    // Add legal filings
+    data.legalFilings.forEach((filing, i) => {
+      steps.push({
+        message: `Found ${filing.type.toLowerCase()}`,
+        delay: 300 + i * 100,
+        type: 'legal' as const,
+      });
+    });
+
+    steps.push({ message: 'Company analysis complete', delay: 400 });
+
+    return steps;
+  }, []);
+
+  // Stream the logs based on fetched data
+  useEffect(() => {
+    if (isApiLoading || !apiData) return;
+
+    const steps = generateStepsFromData(apiData);
+
+    if (currentStep >= steps.length) {
       setIsComplete(true);
-      setDiscoveredCompanyData(mockCompanyData);
+      setDiscoveredCompanyData(apiData);
       return;
     }
 
-    const step = companyDiscoverySteps[currentStep];
+    const step = steps[currentStep];
     const timer = setTimeout(() => {
       setLogs(prev => [...prev, { message: step.message, type: step.type }]);
       setCurrentStep(prev => prev + 1);
     }, step.delay);
 
     return () => clearTimeout(timer);
-  }, [currentStep, setDiscoveredCompanyData]);
+  }, [currentStep, isApiLoading, apiData, setDiscoveredCompanyData, generateStepsFromData]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,6 +144,8 @@ const CompanyDiscovery: React.FC = () => {
     }
   };
 
+  const displayData = apiData || mockCompanyData;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -65,7 +156,20 @@ const CompanyDiscovery: React.FC = () => {
               <Scale className="w-5 h-5" />
               <span className="font-medium">LitiGate</span>
             </div>
-            <span className="step-indicator">Step 2 of 4</span>
+            <div className="flex items-center gap-4">
+              {apiError ? (
+                <span className="flex items-center gap-1 text-xs text-amber-600">
+                  <WifiOff className="w-3 h-3" />
+                  Offline mode
+                </span>
+              ) : !isApiLoading && (
+                <span className="flex items-center gap-1 text-xs text-emerald-600">
+                  <Wifi className="w-3 h-3" />
+                  Live data
+                </span>
+              )}
+              <span className="step-indicator">Step 2 of 4</span>
+            </div>
           </div>
         </div>
       </header>
@@ -120,10 +224,10 @@ const CompanyDiscovery: React.FC = () => {
           >
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: 'Company Info', value: mockCompanyData.companyInfo.length, color: 'text-sky-600' },
-                { label: 'Key People', value: mockCompanyData.employees.length, color: 'text-purple-600' },
-                { label: 'News Articles', value: mockCompanyData.newsArticles.length, color: 'text-amber-600' },
-                { label: 'Legal Filings', value: mockCompanyData.legalFilings.length, color: 'text-emerald-600' },
+                { label: 'Company Info', value: displayData.companyInfo.length, color: 'text-sky-600' },
+                { label: 'Key People', value: displayData.employees.length, color: 'text-purple-600' },
+                { label: 'News Articles', value: displayData.newsArticles.length, color: 'text-amber-600' },
+                { label: 'Legal Filings', value: displayData.legalFilings.length, color: 'text-emerald-600' },
               ].map((stat, i) => (
                 <div key={i} className="p-4 rounded-2xl bg-white border border-border">
                   <div className={`text-3xl font-medium font-mono ${stat.color}`}>{stat.value}</div>
@@ -140,7 +244,7 @@ const CompanyDiscovery: React.FC = () => {
                   Company Information
                 </h3>
                 <div className="space-y-3">
-                  {mockCompanyData.companyInfo.slice(0, 5).map((info, i) => (
+                  {displayData.companyInfo.slice(0, 5).map((info, i) => (
                     <div key={i} className="flex justify-between text-sm">
                       <span className="text-muted-foreground">{info.field}</span>
                       <span className="text-foreground font-medium">{info.value}</span>
@@ -155,7 +259,7 @@ const CompanyDiscovery: React.FC = () => {
                   Key Executives
                 </h3>
                 <div className="space-y-3">
-                  {mockCompanyData.employees.map((emp, i) => (
+                  {displayData.employees.map((emp, i) => (
                     <div key={i} className="flex justify-between text-sm">
                       <span className="text-foreground font-medium">{emp.name}</span>
                       <span className="text-muted-foreground">{emp.role}</span>

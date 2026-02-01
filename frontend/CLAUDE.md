@@ -82,14 +82,17 @@ landing → userDiscovery → [companyDiscovery] → redacto → drafts
 src/
 ├── components/
 │   ├── LandingPage.tsx      # Hero + intake form
-│   ├── UserDiscovery.tsx    # User data scan
-│   ├── CompanyDiscovery.tsx # Company scan
-│   ├── RedactoProcessing.tsx # Analysis + draft generation
-│   └── DraftsView.tsx       # Tinder-style swipe to send/skip documents
+│   ├── UserDiscovery.tsx    # User data scan (calls backend API)
+│   ├── CompanyDiscovery.tsx # Company scan (calls backend API)
+│   ├── RedactoProcessing.tsx # Analysis + draft generation (calls backend API)
+│   ├── DraftsView.tsx       # Tinder-style swipe to send/skip documents
+│   └── DiscoveryGraph.tsx   # Interactive 4-column flow visualization
 ├── context/
 │   └── AppContext.tsx       # State machine + types
+├── services/
+│   └── api.ts               # Backend API client
 ├── data/
-│   └── mockData.ts          # Mock discovery data + streaming steps
+│   └── mockData.ts          # Mock discovery data + streaming steps (fallback)
 ├── pages/
 │   └── Index.tsx            # Router with AnimatePresence
 └── index.css                # Tailwind + CSS variables
@@ -115,12 +118,40 @@ interface DraftItem { id, type, title, content, status: 'pending' | 'sent' | 'de
 - **Auditable** - all decision paths traceable
 - **California only** - single jurisdiction, no cross-jurisdiction inference
 
-## Integration Points (TODO)
+## Backend Integration
+
+The frontend connects to the Express backend at `http://localhost:3001/api`.
+
+### API Client
+
+Located at `src/services/api.ts`:
+- `api.discoverUser(name, email)` - Person research
+- `api.discoverCompany(company, name)` - Company research
+- `api.analyze(userData, companyData, userName)` - Breach analysis
+- `api.fullScan(name, email, phone, company)` - Combined flow
+
+### Graceful Degradation
+
+Components handle API failures gracefully:
+- Show "Live data" indicator when backend connected (green wifi icon)
+- Show "Offline mode" indicator when API unavailable (amber wifi icon)
+- Fall back to mock data from `src/data/mockData.ts` if API fails
+- Streaming UI animations work with both real and mock data
+
+### Modified Components
+
+| Component | Changes |
+|-----------|---------|
+| `UserDiscovery.tsx` | Calls `/api/discover/user`, generates steps from API response |
+| `CompanyDiscovery.tsx` | Calls `/api/discover/company`, generates steps from API response |
+| `RedactoProcessing.tsx` | Calls `/api/analyze`, generates steps from API response |
+
+## Integration Status
 
 | Service | Purpose | Status |
 |---------|---------|--------|
-| Firecrawl | User/company data discovery | Mock data |
-| Reducto | Document analysis + generation | Mock data |
+| Firecrawl | User/company data discovery | ✅ Implemented (via backend) |
+| OpenAI | AI parsing + document generation | ✅ Implemented (via backend) |
 | Resend | Email dispatch | Not implemented |
 | Auth | User accounts | Not implemented |
-| Backend | Persist drafts + audit logs | Not implemented |
+| Database | Persist drafts + audit logs | Not implemented |
