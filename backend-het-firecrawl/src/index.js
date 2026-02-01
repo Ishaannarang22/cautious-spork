@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const complianceApi = require('./compliance/api');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -13,6 +14,8 @@ app.use(express.json());
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Claim Compass API is running' });
 });
+
+app.use('/api/compliance', complianceApi);
 
 // TODO: Firecrawl integration endpoint
 app.post('/api/scrape/linkedin', async (req, res) => {
